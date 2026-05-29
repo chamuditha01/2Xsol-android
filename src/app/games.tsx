@@ -24,6 +24,7 @@ const PROGRAM_ID = new web3.PublicKey(
 const HELIUS_RPC =
   process.env.EXPO_PUBLIC_HELIUS_RPC ?? 'https://api.devnet.solana.com';
 const LOCAL_WALLET_KEY = 'solflip_local_keypair';
+const ACTIVE_GAME_KEY = 'solflip_active_game';
 
 const GAME_SIZE = 200;
 const OFFSET_PLAYER_ONE = 0;
@@ -184,6 +185,12 @@ export default function games() {
 
       const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true });
       await connection.confirmTransaction({ signature: sig, ...latest }, 'confirmed');
+
+      await AsyncStorage.setItem(ACTIVE_GAME_KEY, JSON.stringify({
+        gameId: String(game.game_id),
+        pda: pubkeyStr,
+        playerOneSide: game.player_one_side,
+      }));
 
       Alert.alert('Match Joined!', 'Entering setup... navigate back to the main dash to witness result settlement.', [
         { text: 'OK', onPress: () => router.replace('/') }

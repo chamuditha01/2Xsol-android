@@ -5,25 +5,21 @@ import * as web3 from '@solana/web3.js';
 import bs58 from 'bs58';
 import { Buffer } from 'buffer';
 import * as ExpoLinking from 'expo-linking';
-import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Linking,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Linking,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { G, Path, Polygon } from 'react-native-svg';
 import nacl from 'tweetnacl';
-import WalletNavbarMenu from '../components/wallet-navbar-menu';
 
 if (typeof (globalThis as any).Buffer === 'undefined') (globalThis as any).Buffer = Buffer;
 
@@ -42,7 +38,7 @@ const C = {
   bg: '#080b10',
   surface: '#151618',
   border: '#1c2530',
-  accent: '#C3F306', 
+  accent: '#C3F306', // Precision neon yellow-lime match
   text: '#FFFFFF',
   muted: '#5a6a7a',
 };
@@ -116,97 +112,22 @@ export default function WalletTab() {
   const phantomDappKeypairRef = useRef<nacl.BoxKeyPair | null>(null);
   const phantomEncryptionPublicKeyRef = useRef('');
 
-  // ─── PHANTOM COMPATIBLE SECRETBOX ENCRYPTION pipeline ────────────────────
-// ─────────────────────────────────────────────
-// PHANTOM ENCRYPTION HELPERS (FIXED)
-// ─────────────────────────────────────────────
-
-const encryptPayload = useCallback(
-  (
-    payload: Record<string, unknown>,
-    sharedSecret: Uint8Array
-  ) => {
-
-    // Phantom requires exactly 24 bytes
+  const encryptPayload = useCallback((payload: Record<string, unknown>, sharedSecret: Uint8Array) => {
     const nonce = nacl.randomBytes(24);
-
-    const payloadBytes = Buffer.from(
-      JSON.stringify(payload),
-      'utf8'
-    );
-
-    const encryptedPayload =
-      nacl.box.after(
-        payloadBytes,
-        nonce,
-        sharedSecret
-      );
-
+    const encoded = Buffer.from(JSON.stringify(payload), 'utf8');
+    const encrypted = nacl.box.after(encoded, nonce, sharedSecret);
     return {
       nonce: bs58.encode(nonce),
-      payload: bs58.encode(encryptedPayload),
+      payload: bs58.encode(encrypted),
     };
-  },
-  []
-);
+  }, []);
 
-const decryptPayload = useCallback(
-(
-data:string,
-nonce:string,
-sharedSecret:Uint8Array
-)=>{
+  const decryptPayload = useCallback((data: string, nonce: string, sharedSecret: Uint8Array) => {
+    const decrypted = nacl.box.open.after(bs58.decode(data), bs58.decode(nonce), sharedSecret);
+    if (!decrypted) throw new Error('Unable to decrypt Phantom response.');
+    return JSON.parse(Buffer.from(decrypted).toString('utf8')) as Record<string, unknown>;
+  }, []);
 
-const nonceBytes =
-bs58.decode(
-decodeURIComponent(nonce)
-);
-
-if(
-nonceBytes.length!==24
-){
-
-throw new Error(
-`Invalid nonce size: ${nonceBytes.length}`
-);
-
-}
-
-const decrypted =
-nacl.box.open.after(
-
-bs58.decode(
-decodeURIComponent(data)
-),
-
-nonceBytes,
-
-sharedSecret
-
-);
-
-if(!decrypted){
-
-throw new Error(
-'Unable to decrypt Phantom payload.'
-);
-
-}
-
-return JSON.parse(
-
-Buffer
-.from(decrypted)
-.toString('utf8')
-
-) as Record<
-string,
-unknown
->;
-
-},
-[]
-);
   const waitForPhantomRedirect = useCallback(async (urlToOpen: string, timeoutMs = 120000) => {
     return await new Promise<string>((resolve, reject) => {
       let settled = false;
@@ -218,7 +139,6 @@ unknown
       };
       const handleUrl = ({ url }: { url: string }) => {
         if (!url.startsWith(PHANTOM_REDIRECT_LINK)) return;
-        if (!url.includes('?')) return;
         cleanup();
         resolve(url);
       };
@@ -231,6 +151,12 @@ unknown
       void Linking.openURL(urlToOpen).catch(error => {
         cleanup();
         reject(error);
+      });
+      void Linking.getInitialURL().then(initialUrl => {
+        if (initialUrl && initialUrl.startsWith(PHANTOM_REDIRECT_LINK)) {
+          cleanup();
+          resolve(initialUrl);
+        }
       });
     });
   }, []);
@@ -341,285 +267,90 @@ unknown
     } finally {
       setConnecting(false);
     }
-  }, [decryptPayload, waitForPhantomRedirect]);
+  }, []);
 
-const depositToAppWallet = useCallback(() => {
+  const depositToAppWallet = useCallback(() => {
+    const lamports = normalizeAmount(amount);
+    if (!lamports) {
+      Alert.alert('Deposit', 'Enter a valid amount in SOL.');
+      return;
+    }
+    if (!appWalletAddress) {
+      Alert.alert('Deposit', 'App wallet is not ready yet.');
+      return;
+    }
+    if (!mainWalletAddress) {
+      Alert.alert('Deposit', 'Connect Phantom or paste your main wallet address first.');
+      return;
+    }
+    if (Platform.OS === 'web') {
+      Alert.alert('Deposit', 'Phantom deposit requires a mobile build.');
+      return;
+    }
 
-  const lamports = normalizeAmount(amount);
+    setDepositing(true);
+    setStatus('depositing_from_phantom');
 
-  if (!lamports) {
-    Alert.alert(
-      'Deposit',
-      'Enter valid amount.'
-    );
-    return;
-  }
+    void (async () => {
+      try {
+        const dappKeypair = phantomDappKeypairRef.current;
+        const session = phantomSessionRef.current;
 
-  if (!appWalletAddress) {
-    Alert.alert(
-      'Deposit',
-      'App wallet not ready.'
-    );
-    return;
-  }
+        if (!dappKeypair || !session) throw new Error('Connect Phantom first.');
 
-  if (!mainWalletAddress) {
-    Alert.alert(
-      'Deposit',
-      'Connect Phantom first.'
-    );
-    return;
-  }
+        const mainPubkey = walletAddressToPublicKey(mainWalletAddress);
+        const appPubkey = new web3.PublicKey(appWalletAddress);
+        const latest = await connection.getLatestBlockhash('confirmed');
 
-  setDepositing(true);
-
-  void (async () => {
-
-    try {
-
-      const dappKeypair =
-        phantomDappKeypairRef.current;
-
-      const session =
-        phantomSessionRef.current;
-
-      if (!dappKeypair || !session)
-        throw new Error(
-          'Reconnect Phantom.'
+        const tx = new web3.Transaction().add(
+          web3.SystemProgram.transfer({ fromPubkey: mainPubkey, toPubkey: appPubkey, lamports })
         );
 
-      if (
-        !phantomEncryptionPublicKeyRef.current
-      ) {
-        throw new Error(
-          'Missing encryption key.'
+        tx.feePayer = mainPubkey;
+        tx.recentBlockhash = latest.blockhash;
+
+        if (!phantomEncryptionPublicKeyRef.current) throw new Error('Missing Phantom encryption key. Reconnect Phantom.');
+
+        const sharedSecret = nacl.box.before(bs58.decode(phantomEncryptionPublicKeyRef.current), dappKeypair.secretKey);
+        const txBytes = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+        const { nonce, payload } = encryptPayload({ session, transaction: bs58.encode(txBytes) }, sharedSecret);
+
+        const responseUrl = await waitForPhantomRedirect(
+          `${PHANTOM_DEEPLINK_BASE}/signTransaction?` +
+            new URLSearchParams({
+              dapp_encryption_public_key: bs58.encode(dappKeypair.publicKey),
+              nonce,
+              redirect_link: PHANTOM_REDIRECT_LINK,
+              payload,
+            }).toString()
         );
+
+        const queryParams = ExpoLinking.parse(responseUrl).queryParams as Record<string, string | undefined>;
+        const signedResponse = decryptPayload(queryParams.data ?? '', queryParams.nonce ?? '', sharedSecret);
+        const signedTransaction = String(signedResponse.transaction ?? signedResponse.signed_transaction ?? '');
+
+        if (!signedTransaction) throw new Error('Phantom did not return a signed transaction.');
+
+        const signedTx = web3.Transaction.from(bs58.decode(signedTransaction));
+        const signatures = [
+          await connection.sendRawTransaction(signedTx.serialize(), {
+            skipPreflight: false,
+            preflightCommitment: 'confirmed',
+          }),
+        ];
+
+        Alert.alert('Deposit complete', `Signature: ${signatures[0]}`);
+        setStatus('deposit_complete');
+        await fetchAppBalance();
+      } catch (error: any) {
+        console.warn('depositToAppWallet error', error);
+        Alert.alert('Deposit failed', error?.message ?? 'Unable to deposit.');
+        setStatus('deposit_failed');
+      } finally {
+        setDepositing(false);
       }
-
-      const mainPubkey =
-        new web3.PublicKey(
-          mainWalletAddress
-        );
-
-      const appPubkey =
-        new web3.PublicKey(
-          appWalletAddress
-        );
-
-      const latest =
-        await connection.getLatestBlockhash(
-          'confirmed'
-        );
-
-      const tx =
-        new web3.Transaction().add(
-
-          web3.SystemProgram.transfer({
-
-            fromPubkey:
-              mainPubkey,
-
-            toPubkey:
-              appPubkey,
-
-            lamports,
-
-          })
-
-        );
-
-      tx.feePayer =
-        mainPubkey;
-
-      tx.recentBlockhash =
-        latest.blockhash;
-
-      const sharedSecret =
-        nacl.box.before(
-
-          bs58.decode(
-            phantomEncryptionPublicKeyRef.current
-          ),
-
-          dappKeypair.secretKey
-
-        );
-
-      const serializedTx =
-        tx.serialize({
-
-          requireAllSignatures:false,
-          verifySignatures:false,
-
-        });
-
-      const payloadData = {
-
-        session,
-
-        transaction:
-          Buffer
-            .from(serializedTx)
-            .toString('base64'),
-
-      };
-
-      const {
-        nonce,
-        payload
-      } =
-        encryptPayload(
-          payloadData,
-          sharedSecret
-        );
-
-      const deepLink =
-
-        `${PHANTOM_DEEPLINK_BASE}/signTransaction?` +
-
-        new URLSearchParams({
-
-          dapp_encryption_public_key:
-            bs58.encode(
-              dappKeypair.publicKey
-            ),
-
-          nonce,
-
-          redirect_link:
-            PHANTOM_REDIRECT_LINK,
-
-          payload,
-
-        }).toString();
-
-      const responseUrl =
-        await waitForPhantomRedirect(
-          deepLink
-        );
-
-      const queryParams =
-        ExpoLinking.parse(
-          responseUrl
-        ).queryParams as Record<
-          string,
-          string | undefined
-        >;
-
-      const decryptedResponse =
-        decryptPayload(
-
-          queryParams.data ?? '',
-
-          queryParams.nonce ?? '',
-
-          sharedSecret
-
-        );
-
-      const signedTxBase64 =
-        String(
-          decryptedResponse.transaction ??
-          ''
-        );
-
-      if (!signedTxBase64) {
-
-        throw new Error(
-          'No signed transaction returned.'
-        );
-
-      }
-
-      const signedTx =
-        web3.Transaction.from(
-
-          Buffer.from(
-            signedTxBase64,
-            'base64'
-          )
-
-        );
-
-      const signature =
-        await connection.sendRawTransaction(
-
-          signedTx.serialize(),
-
-          {
-
-            skipPreflight:false,
-
-            preflightCommitment:
-              'confirmed'
-
-          }
-
-        );
-
-      await connection.confirmTransaction(
-
-        {
-
-          signature,
-
-          blockhash:
-            latest.blockhash,
-
-          lastValidBlockHeight:
-            latest.lastValidBlockHeight,
-
-        },
-
-        'confirmed'
-
-      );
-
-      Alert.alert(
-
-        'Deposit Complete',
-
-        signature
-
-      );
-
-      await fetchAppBalance();
-
-    }
-    catch (err:any) {
-
-      console.warn(
-        'deposit error',
-        err
-      );
-
-      Alert.alert(
-
-        'Deposit Failed',
-
-        err?.message ??
-        'Unknown error'
-
-      );
-
-    }
-    finally {
-
-      setDepositing(false);
-
-    }
-
-  })();
-
-},[
-  amount,
-  appWalletAddress,
-  mainWalletAddress,
-  encryptPayload,
-  decryptPayload,
-  fetchAppBalance,
-  waitForPhantomRedirect
-]);
+    })();
+  }, [amount, appWalletAddress, fetchAppBalance, mainWalletAddress]);
 
   const withdrawToMainWallet = useCallback(async () => {
     const lamports = normalizeAmount(amount);
@@ -678,40 +409,13 @@ const depositToAppWallet = useCallback(() => {
     }
   }, [amount, appWalletAddress, appWalletBalance, fetchAppBalance, mainWalletAddress]);
 
-  const connectButtonLabel = mainWalletAddress ? 'Connected' : 'Connect';
-
   return (
     <SafeAreaView style={s.root}>
-      <View style={s.topBar}>
-        <Pressable style={s.brandWrapper} onPress={() => router.push('/')}>
-          <Svg id="reference-one" width={90} height={76} viewBox="0 0 280.37 153.25">
-            <Polygon fill="#121314" points="88.99 10.55 20.04 1.63 2.98 60.61 26.28 67.8 7.44 79.17 4.25 151.62 87.17 141.34 122.66 146.25 125.48 134.93 130.67 151.62 184.37 142.25 206.49 150.17 232.7 145.71 252.18 133.6 270.02 111.48 277.39 76.63 267.2 37.76 243.89 14.65 206.76 4.54 183.55 14.19 185.83 8.45 131.13 12.64 128.58 19.65 126.76 12.73 88.99 10.55"/>
-            <Polygon fill="#FFFFFF" points="48.56 58.96 21.62 50.61 30.73 19.23 79.25 22.47 89.96 41.41 88.55 72.56 44.39 99.42 42.03 110.75 65.59 107.93 64.64 97.63 91.53 92.35 86.13 126.61 20.04 134.66 22.15 87.89 65.55 61.76 64.18 42.32 49.26 43.45 48.56 58.96"/>
-            <Polygon fill="#FFFFFF" points="91.19 25.48 117.04 27.12 128.39 61.02 140.15 26.82 165.29 25.11 143.09 78.26 165.93 130.54 141.03 134.93 127.85 93.61 115.91 130.8 91.81 127.19 112.7 76.52 91.19 25.48"/>
-            <Path fill="#c3f306" d="M263.15,78.19c-2.07,20.59-16.39,39.14-16.39,39.14-17.31,12.35-35.26,15.34-35.26,15.34-.95-.27-1.87-.53-2.79-.81-19.8-6-32.08-14.74-35.15-17.09-.5-.38-.76-.59-.76-.59-12.53-22.14-12.95-38.29-12.95-38.29,4.17-21.38,15.81-38.69,15.81-38.69,15.6-11.36,30.64-14.94,33.68-15.58.37-.08.56-.11.56-.11,7.24,1.02,13.6,2.91,18.99,5.09,13.33,5.39,20.73,12.53,20.73,12.53,12.39,19.65,13.53,39.05,13.53,39.05h0Z"/>
-            <Path fill="#121314" d="M242.26,115.83c-12.46,10.42-28.25,14.79-33.54,16.03-19.8-6-32.08-14.74-35.15-17.09,9.73,6.72,35.35,14.49,35.35,14.49,14.64-2.83,31.62-15,31.62-15l1.72,1.57h0Z"/>
-            <G>
-              <Path fill="#121314" d="M236.98,43.63s-11.66-9.34-28.17-13.61c0,0-18.86,6.12-28.2,13.18,0,0-9.66,15.65-13.44,33.06,0,0,.6,12.66,11.17,32.05,0,0-7.26-19.99-7.7-30.71,0,0,6.46-21.22,12.92-30.96,0,0,13.2-9.25,25.89-12.85,0,0,7.7-.11,27.52,9.84h0Z" />
-              <Path fill="#121314" d="M247.88,73.22s-5.47,17.88-14.69,32.63c0,0-14.24,10.59-29.44,14.85l2.38.76s15.86-3.1,29.13-13.15c0,0,10.54-16.95,13.02-31.74l-.4-3.34h0Z" />
-              <Path fill="#121314" d="M254.11,65.3c-6.39-21.82-12.16-27.95-12.16-27.95-15.66-11.37-28.66-14.86-32.61-15.72.37-.08.56-.11.56-.11,7.24,1.02,13.6,2.91,18.99,5.09,9.04,4.29,15.24,9.67,15.24,9.67,6.72,9.41,9.87,28.36,9.98,29.02h0Z" />
-              <Path fill="#121314" d="M242.26,115.83s13.48-20.07,12.92-36.84c0,0-3.04,18.45-14.64,35.27" />
-              <Path fill="#121314" d="M231.68,55.55l-8.32,8.67c-.4.41-.95.65-1.52.65h-36.84c-.94,0-1.42-1.12-.77-1.8l8.32-8.67c.4-.41.95-.65,1.52-.65h36.84c.94,0,1.42,1.12.77,1.8h0Z" />
-              <Path fill="#121314" d="M184.23,71.87l8.32,8.67c.4.41.95.65,1.52.65h36.84c.94,0,1.42-1.12.77-1.8l-8.32-8.67c-.4-.41-.95-.65-1.52-.65h-36.84c-.94,0-1.42,1.12-.77,1.8Z" />
-              <Path fill="#121314" d="M231.68,88.19l-8.32,8.67c-.4.41-.95.65-1.52.65h-36.84c-.94,0-1.42-1.12-.77-1.8l8.32-8.67c.4-.41.95-.65,1.52-.65h36.84c.94,0,1.42,1.12.77,1.8Z" />
-            </G>
-          </Svg>
-        </Pressable>
-
-        <WalletNavbarMenu
-          balanceLabel={loadingWallet ? '...' : appWalletBalance.toFixed(1)}
-          walletAddress={appWalletAddress}
-        />
-      </View>
-
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false} scrollEnabled={false}>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         
         {/* HEAD TITLE AREA */}
         <View style={s.hero}>
+          <Text style={s.kicker}>terminal wallet link</Text>
           <Text style={s.title}>funds portal</Text>
           <Text style={s.subtitle}>
             Bridge assets into your localized betting instance or withdraw accumulated wins instantly.
@@ -745,21 +449,28 @@ const depositToAppWallet = useCallback(() => {
             </View>
           </View>
           
-          <View style={s.buttonContainer}>
-            <View style={s.buttonShadow} />
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={[s.hollowOutlineBtn, connecting && s.disabledOpacity]}
-              onPress={() => { void connectPhantom(); }}
-              disabled={connecting}
-            >
-              {connecting ? (
-                <ActivityIndicator color={C.accent} />
-              ) : (
-                <Text style={s.hollowBtnText}>{connectButtonLabel}</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+          <TextInput
+            style={s.flatInputText}
+            value={mainWalletAddress}
+            onChangeText={setMainWalletAddress}
+            placeholder="paste target 58-hash public key"
+            placeholderTextColor={C.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={[s.hollowOutlineBtn, connecting && s.disabledOpacity]}
+            onPress={() => { void connectPhantom(); }}
+            disabled={connecting}
+          >
+            {connecting ? (
+              <ActivityIndicator color={C.accent} />
+            ) : (
+              <Text style={s.hollowBtnText}>connect phantom mobile app</Text>
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* COMPONENT CARD 3: ESCROW TRANSFER AMOUNT ROUTER */}
@@ -779,14 +490,14 @@ const depositToAppWallet = useCallback(() => {
             {/* DEPOSIT ACTION BUTTON */}
             <TouchableOpacity
               activeOpacity={0.8}
-              style={[s.hollowOutlineBtndeposit, { flex: 1 }, depositing && s.disabledOpacity]}
+              style={[s.hollowOutlineBtn, { flex: 1 }, depositing && s.disabledOpacity]}
               onPress={() => { void depositToAppWallet(); }}
               disabled={depositing}
             >
               {depositing ? (
                 <ActivityIndicator color={C.accent} />
               ) : (
-                <Text style={s.hollowBtnTextdeposit}>deposit</Text>
+                <Text style={s.hollowBtnText}>deposit</Text>
               )}
             </TouchableOpacity>
 
@@ -806,6 +517,12 @@ const depositToAppWallet = useCallback(() => {
           </View>
         </View>
 
+        {/* LOG SYSTEM HARD STATUS DEPLOYMENT PANEL */}
+        <View style={s.statusCardFrame}>
+          <Text style={s.statusLabel}>system engine log status</Text>
+          <Text style={s.statusText}>{status.toLowerCase()}</Text>
+        </View>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -816,18 +533,6 @@ const s = StyleSheet.create({
     flex: 1,
     backgroundColor: C.bg,
   },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingVertical: 5,
-  },
-  brandWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
   scroll: {
     paddingHorizontal: 24,
     paddingTop: 12,
@@ -836,6 +541,13 @@ const s = StyleSheet.create({
   },
   hero: {
     paddingVertical: 4,
+  },
+  kicker: {
+    fontFamily: 'Orbitron',
+    fontSize: 11,
+    color: C.accent,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
   title: {
     fontFamily: 'Orbitron',
@@ -851,6 +563,8 @@ const s = StyleSheet.create({
     lineHeight: 18,
     textTransform: 'lowercase',
   },
+  
+  // ─── BRUTALIST GRID ELEMENT CARDS ────────────────────────────────────────
   brutalistCard: {
     backgroundColor: 'transparent',
     borderColor: '#1c2530',
@@ -878,7 +592,7 @@ const s = StyleSheet.create({
   badgeText: {
     fontFamily: 'Orbitron',
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '900',
     textTransform: 'uppercase',
   },
   addressText: {
@@ -892,6 +606,8 @@ const s = StyleSheet.create({
     color: C.text,
     textTransform: 'lowercase',
   },
+  
+  // ─── RIGID FORM ENTRY INPUT LAYERS ────────────────────────────────────────
   flatInputText: {
     backgroundColor: '#151618',
     borderColor: '#1c2530',
@@ -908,6 +624,8 @@ const s = StyleSheet.create({
     gap: 16,
     width: '100%',
   },
+  
+  // ─── BRUTALIST INTERACTION ACTUATORS ──────────────────────────────────────
   solidAccentBtn: {
     height: 44,
     backgroundColor: '#C3F306',
@@ -919,48 +637,10 @@ const s = StyleSheet.create({
     fontFamily: 'Orbitron',
     fontSize: 15,
     color: '#080b10',
-    fontWeight: '600',
+    fontWeight: '900',
     textTransform: 'lowercase',
   },
   hollowOutlineBtn: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#D1FF00', 
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 0,            
-    borderWidth: 0,
-  },
-  buttonShadow: {
-    position: 'absolute',
-    top: 8,            
-    left: 8,           
-    right: -8,         
-    bottom: -8,        
-    backgroundColor: '#FFFFFF',
-    borderRadius: 0,   
-  },
-  hollowBtnText: {
-    fontFamily: 'Orbitron',
-    fontSize: 30,
-    color: '#000000',
-    textShadowColor: '#000000',
-    textShadowRadius: 1,
-    letterSpacing: -0.5, 
-  },
-  disabledOpacity: {
-    opacity: 0.3,
-  },
-  buttonContainer: {
-    position: 'relative',
-    marginTop: 20,
-    height: 74,        
-    marginBottom: 16,  
-  },
-  hollowOutlineBtndeposit: {
     height: 44,
     backgroundColor: '#151618',
     borderWidth: 2,
@@ -969,10 +649,35 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 0,
   },
-  hollowBtnTextdeposit: {
+  hollowBtnText: {
     fontFamily: 'Orbitron',
     fontSize: 15,
     color: '#FFFFFF',
     textTransform: 'lowercase',
+  },
+  disabledOpacity: {
+    opacity: 0.3,
+  },
+  
+  // ─── BOTTOM SYSTEM DIAGNOSTIC COMPONENT ───────────────────────────────────
+  statusCardFrame: {
+    backgroundColor: '#151618',
+    borderColor: '#1c2530',
+    borderWidth: 1,
+    borderRadius: 0,
+    padding: 14,
+    marginTop: 8,
+  },
+  statusLabel: {
+    fontFamily: 'Orbitron',
+    fontSize: 10,
+    color: C.muted,
+    textTransform: 'lowercase',
+  },
+  statusText: {
+    fontFamily: 'Orbitron',
+    fontSize: 13,
+    color: C.text,
+    marginTop: 4,
   },
 });
