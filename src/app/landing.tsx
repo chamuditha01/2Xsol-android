@@ -191,8 +191,15 @@ export default function LandingScreen() {
 
     try {
       const savedSession = await safeGet(PHANTOM_SESSION_KEY);
+      const storedLocalWallet = await safeGet(LOCAL_WALLET_KEY);
       if (savedSession) {
         setStatusMsg('CONNECTED!');
+        router.replace('/');
+        return;
+      }
+
+      if (storedLocalWallet) {
+        setStatusMsg('WALLET READY!');
         router.replace('/');
         return;
       }

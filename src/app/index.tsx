@@ -883,13 +883,11 @@ export default function HomeScreen() {
 
     await secureStorage.deleteItem(PHANTOM_SESSION_KEY);
 
-    localWallet.current = null;
-
     setWalletKey(null);
 
     setWalletLoading(true);
 
-    void loadWallet();
+    router.replace('/landing');
 
   }, []);
 
