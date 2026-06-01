@@ -33,7 +33,7 @@ const DEFAULT_MAIN_WALLET_ADDRESS = process.env.EXPO_PUBLIC_MAIN_WALLET_ADDRESS 
 const PHANTOM_DEEPLINK_BASE = 'https://phantom.app/ul/v1';
 const PHANTOM_APP_URL = 'https://example.com';
 const PHANTOM_REDIRECT_LINK = 'soldoublerandroid://wallet';
-const PHANTOM_SESSION_KEY = 'solflip_main_wallet_session';
+const PHANTOM_SESSION_KEY = 'solflip_phantom_session';
 const MAIN_WALLET_ADDRESS_KEY = 'solflip_main_wallet_address';
 const PHANTOM_DAPP_KEYPAIR_KEY = 'solflip_phantom_dapp_keypair';
 const PHANTOM_ENCRYPTION_PUBLIC_KEY_KEY = 'solflip_phantom_encryption_public_key';
@@ -223,54 +223,23 @@ export default function WalletTab() {
     void fetchAppBalance();
   }, [appWalletAddress, fetchAppBalance]);
 
-  const connectPhantom = useCallback(async () => {
-    if (Platform.OS === 'web') {
-      Alert.alert('Phantom', 'Connect on a mobile build to use Phantom.');
-      return;
-    }
-    setConnecting(true);
-    setStatus('connecting_phantom');
+  const disconnectPhantom = useCallback(async () => {
     try {
-      const dappKeypair = nacl.box.keyPair();
-      phantomDappKeypairRef.current = dappKeypair;
-      await AsyncStorage.setItem(PHANTOM_DAPP_KEYPAIR_KEY, serializeBoxKeypair(dappKeypair));
-
-      const connectParams = new URLSearchParams({
-        app_url: PHANTOM_APP_URL,
-        dapp_encryption_public_key: bs58.encode(dappKeypair.publicKey),
-        cluster: 'devnet',
-        redirect_link: PHANTOM_REDIRECT_LINK,
-      });
-
-      const responseUrl = await waitForPhantomRedirect(`${PHANTOM_DEEPLINK_BASE}/connect?${connectParams.toString()}`);
-      const queryParams = ExpoLinking.parse(responseUrl).queryParams as Record<string, string | undefined>;
-
-      const sharedSecret = nacl.box.before(bs58.decode(queryParams.phantom_encryption_public_key ?? ''), dappKeypair.secretKey);
-      const response = decryptPayload(queryParams.data ?? '', queryParams.nonce ?? '', sharedSecret);
-
-      const publicKey = String(response.public_key ?? response.address ?? '');
-      const session = String(response.session ?? '');
-      const phantomEncryptionPublicKey = String(queryParams.phantom_encryption_public_key ?? '');
-
-      if (!publicKey || !session) throw new Error('Phantom connect response was incomplete.');
-
-      const normalizedAddress = walletAddressToPublicKey(publicKey).toBase58();
-      phantomSessionRef.current = session;
-      phantomEncryptionPublicKeyRef.current = phantomEncryptionPublicKey;
-      setMainWalletAddress(normalizedAddress);
-      await AsyncStorage.multiSet([
-        [PHANTOM_SESSION_KEY, session],
-        [MAIN_WALLET_ADDRESS_KEY, normalizedAddress],
-        [PHANTOM_ENCRYPTION_PUBLIC_KEY_KEY, phantomEncryptionPublicKey],
+      await AsyncStorage.multiRemove([
+        PHANTOM_SESSION_KEY,
+        MAIN_WALLET_ADDRESS_KEY,
+        PHANTOM_DAPP_KEYPAIR_KEY,
+        PHANTOM_ENCRYPTION_PUBLIC_KEY_KEY,
       ]);
-      setStatus('phantom_connected');
-      Alert.alert('Phantom Connected', `Main wallet: ${normalizedAddress}`);
+      setMainWalletAddress('');
+      phantomSessionRef.current = '';
+      phantomDappKeypairRef.current = null;
+      phantomEncryptionPublicKeyRef.current = '';
+      setStatus('phantom_disconnected');
+      Alert.alert('Phantom Disconnected', 'Phantom wallet has been disconnected.');
     } catch (error: any) {
-      console.warn('connectPhantom error', error);
-      Alert.alert('Phantom', error?.message ?? 'Unable to connect Phantom.');
-      setStatus('phantom_connect_failed');
-    } finally {
-      setConnecting(false);
+      console.warn('disconnectPhantom error', error);
+      Alert.alert('Error', 'Failed to disconnect Phantom wallet.');
     }
   }, []);
 
@@ -491,15 +460,10 @@ export default function WalletTab() {
 
           <TouchableOpacity
             activeOpacity={0.8}
-            style={[s.hollowOutlineBtn, connecting && s.disabledOpacity]}
-            onPress={() => { void connectPhantom(); }}
-            disabled={connecting}
+            style={s.hollowOutlineBtn}
+            onPress={() => { void disconnectPhantom(); }}
           >
-            {connecting ? (
-              <ActivityIndicator color={C.accent} />
-            ) : (
-              <Text style={s.hollowBtnText}>connect phantom mobile app</Text>
-            )}
+            <Text style={s.hollowBtnText}>disconnect phantom mobile app</Text>
           </TouchableOpacity>
         </View>
 
