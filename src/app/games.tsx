@@ -165,6 +165,11 @@ export default function games() {
   const joinedWagerLamportsRef = useRef<number>(0);
   const settledRef = useRef(false);
   const activeGameIdRef = useRef<number | null>(null);
+  const lastFlipResultRef = useRef<{
+    gameId: number;
+    winner: string;
+    winnerSide: number;
+  } | null>(null);
 
   const coinAnim = useRef(new Animated.Value(0)).current;
   const flipLoop = useRef<Animated.CompositeAnimation | null>(null);
@@ -220,6 +225,56 @@ const walletKeyRef = useRef<web3.PublicKey | null>(null);
   }, []);
 
   useEffect(() => { void loadWallet(); }, [loadWallet]);
+
+  // ── Listen for Contract Logs ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!PROGRAM_ID) return;
+    console.log('Subscribing to program logs for program:', PROGRAM_ID.toBase58());
+    
+    let subId: number | null = null;
+    try {
+      subId = connection.onLogs(
+        PROGRAM_ID,
+        (logs) => {
+          if (logs && logs.logs) {
+            logs.logs.forEach((log) => {
+              if (log.includes('FLIP_RESULT:')) {
+                console.log('Solana Contract Emit Log - FLIP_RESULT:', log);
+                try {
+                  const gameIdMatch = log.match(/game_id=(\d+)/);
+                  const winnerSideMatch = log.match(/winner_side=(\d+)/);
+                  const winnerMatch = log.match(/winner=([a-zA-Z0-9]+)/);
+                  if (gameIdMatch && winnerMatch && winnerSideMatch) {
+                    lastFlipResultRef.current = {
+                      gameId: parseInt(gameIdMatch[1], 10),
+                      winner: winnerMatch[1],
+                      winnerSide: parseInt(winnerSideMatch[1], 10),
+                    };
+                    console.log('Parsed last flip result:', lastFlipResultRef.current);
+                  }
+                } catch (err) {
+                  console.error('Error parsing FLIP_RESULT log:', err);
+                }
+              }
+            });
+          }
+        },
+        'confirmed'
+      );
+    } catch (err) {
+      console.error('Failed to subscribe to program logs:', err);
+    }
+
+    return () => {
+      if (subId !== null) {
+        try {
+          connection.removeOnLogsListener(subId);
+        } catch (err) {
+          console.error('Failed to unsubscribe from program logs:', err);
+        }
+      }
+    };
+  }, []);
 
   // ─── Fetch On-Chain Game Accounts ──────────────────────────────────────────
   const fetchGames = useCallback(async () => {
@@ -362,19 +417,39 @@ const applySettlementResult = useCallback((history: HistoryItem) => {
 
     await new Promise(resolve => setTimeout(resolve, 2500));
 
+    // 1. Try history PDA lookup
     const history = await getHistoryByGameId(gameId);
     if (history) {
       applySettlementResult(history);
       return;
     }
 
-    
- 
-    // Don't fall back to balance check — keep polling for history
-startSettlementPoll(gameId);
-return; // exit, let the poll call applySettlementResult when ready
+    // 2. Try parsed log from realtime logs subscription
+    if (lastFlipResultRef.current && lastFlipResultRef.current.gameId === gameId) {
+      const logRes = lastFlipResultRef.current;
+      const won = !!walletKeyRef.current && logRes.winner === walletKeyRef.current.toBase58();
+      console.log('winner selected from parsed logs (games.tsx)', {
+        gameId,
+        winner: logRes.winner,
+        myPubkey: walletKeyRef.current?.toBase58(),
+        won,
+      });
 
- }, [applySettlementResult, clearSettlingWatchers, getHistoryByGameId, startSettlementPoll]);
+      clearSettlingWatchers();
+      setResultSide(logRes.winnerSide);
+      setResultAmount(won ? (joinedWagerLamportsRef.current / web3.LAMPORTS_PER_SOL) : 0);
+      setResultModal(won ? 'WON' : 'LOST');
+      setActiveGameMessage(won ? 'SETTLED: YOU WON' : 'SETTLED: YOU LOST');
+      setPhase('done');
+      void AsyncStorage.removeItem(ACTIVE_GAME_KEY);
+      lastFlipResultRef.current = null; // Clear it
+      return;
+    }
+
+    // Don't fall back to balance check — keep polling for history
+    startSettlementPoll(gameId);
+    return; // exit, let the poll call applySettlementResult when ready
+  }, [applySettlementResult, clearSettlingWatchers, getHistoryByGameId, startSettlementPoll]);
   const subscribeToJoinedGame = useCallback((pda: web3.PublicKey, gameId: number) => {
     clearJoinedGameWatcher();
 

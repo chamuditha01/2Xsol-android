@@ -350,6 +350,11 @@ export default function HomeScreen() {
   const settleLogsRef = useRef<number | null>(null);
   const settleStartedAtRef = useRef(0);
   const fetchHistoryRef = useRef<((force?: boolean) => Promise<void>) | null>(null);
+  const lastFlipResultRef = useRef<{
+    gameId: number;
+    winner: string;
+    winnerSide: number;
+  } | null>(null);
 
   // ── Coin animation ────────────────────────────────────────────────────────
   const coinAnim   = useRef(new Animated.Value(0)).current;
@@ -425,6 +430,56 @@ const loadWallet = useCallback(async () => {
 }, []);
 
   useEffect(() => { void loadWallet(); }, [loadWallet]);
+
+  // ── Listen for Contract Logs ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!PROGRAM_ID) return;
+    console.log('Subscribing to program logs for program:', PROGRAM_ID.toBase58());
+    
+    let subId: number | null = null;
+    try {
+      subId = connection.onLogs(
+        PROGRAM_ID,
+        (logs) => {
+          if (logs && logs.logs) {
+            logs.logs.forEach((log) => {
+              if (log.includes('FLIP_RESULT:')) {
+                console.log('Solana Contract Emit Log - FLIP_RESULT:', log);
+                try {
+                  const gameIdMatch = log.match(/game_id=(\d+)/);
+                  const winnerSideMatch = log.match(/winner_side=(\d+)/);
+                  const winnerMatch = log.match(/winner=([a-zA-Z0-9]+)/);
+                  if (gameIdMatch && winnerMatch && winnerSideMatch) {
+                    lastFlipResultRef.current = {
+                      gameId: parseInt(gameIdMatch[1], 10),
+                      winner: winnerMatch[1],
+                      winnerSide: parseInt(winnerSideMatch[1], 10),
+                    };
+                    console.log('Parsed last flip result:', lastFlipResultRef.current);
+                  }
+                } catch (err) {
+                  console.error('Error parsing FLIP_RESULT log:', err);
+                }
+              }
+            });
+          }
+        },
+        'confirmed'
+      );
+    } catch (err) {
+      console.error('Failed to subscribe to program logs:', err);
+    }
+
+    return () => {
+      if (subId !== null) {
+        try {
+          connection.removeOnLogsListener(subId);
+        } catch (err) {
+          console.error('Failed to unsubscribe from program logs:', err);
+        }
+      }
+    };
+  }, []);
 
   // ─────────────────────────────────────────────────────────────────────────
   // BALANCE
@@ -584,6 +639,30 @@ const loadWallet = useCallback(async () => {
       console.warn('history lookup failed:', e);
     }
 
+    // 2. Try parsed log from realtime sub (solves rent-refund balance fallback bug)
+    if (won === null && gid != null && lastFlipResultRef.current && lastFlipResultRef.current.gameId === gid) {
+      const logRes = lastFlipResultRef.current;
+      won = !!walletKey && logRes.winner === walletKey.toBase58();
+      console.log('winner selected from parsed logs', {
+        gameId: gid,
+        winner: logRes.winner,
+        myPubkey: walletKey?.toBase58(),
+        won,
+      });
+
+      setResultSide(logRes.winnerSide);
+      setResultAmount(won ? parseFloat(wager) : 0);
+      setResultModal(won ? 'WON' : 'LOST');
+      setSystemMsg(won ? 'SETTLED: YOU WON' : 'SETTLED: YOU LOST');
+      setPhase('done');
+      activePda.current = null;
+      settledRef.current = false;
+      lastFlipResultRef.current = null; // Clear log cache after use
+
+      setTimeout(() => { void fetchHistoryRef.current?.(true); }, 3000);
+      return;
+    }
+
     if (won === null) {
       const newBal = await refreshBalance();
       won = newBal > balBefore.current;
@@ -610,7 +689,7 @@ const loadWallet = useCallback(async () => {
     settledRef.current = false;
 
     setTimeout(() => { void fetchHistoryRef.current?.(true); }, 3000);
-  }, [clearSettlingWatchers, getHistoryByGameId, refreshBalance, unsubGame, walletKey]);
+  }, [clearSettlingWatchers, getHistoryByGameId, refreshBalance, unsubGame, walletKey, wager]);
 
   const subscribeToGame = useCallback((pda: web3.PublicKey) => {
     unsubGame();
@@ -1012,7 +1091,7 @@ const loadWallet = useCallback(async () => {
   const inGame = phase !== 'idle' && phase !== 'done';
   const busy   = phase === 'creating';
   const isLoseResult = resultModal === 'LOST';
-  const resultCoinMainFill = isLoseResult ? '#121314' : '#c3f306';
+  const resultCoinMainFill = isLoseResult ? '#272828' : '#c3f306';
   const resultCoinDetailFill = isLoseResult ? '#8A8D90' : '#121314';
 
 const renderLobbyCard = ({ item }: { item: OpenGame }) => {
@@ -2109,7 +2188,7 @@ fontFamily: 'Orbitron',
     
   },
 wagerLabel: {
-    fontFamily: 'Orbitron',       // Call your font here
+    fontFamily: 'Orbitron-SemiBold',       // Call your font here
     fontSize: 15,
     color: 'white',
     textAlign: 'center',

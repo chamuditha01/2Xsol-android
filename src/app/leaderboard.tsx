@@ -553,7 +553,7 @@ const s = StyleSheet.create({
     borderWidth: 0,
   },
   btnCreateNewText: {
-    fontFamily: 'Orbitron-SemiBold',
+    fontFamily: 'Orbitron-Bold',
     fontSize: 28, // Large bold low-profile typography sizing metric
     color: '#000000',
     fontWeight: '600',
