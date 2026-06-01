@@ -406,7 +406,7 @@ export default function WalletTab() {
                 </Pressable>
 
         <WalletNavbarMenu
-          balanceLabel={loadingWallet ? '...' : appWalletBalance.toFixed(1)}
+          balanceLabel={loadingWallet ? '...' : appWalletBalance.toFixed(2)}
           walletAddress={appWalletAddress ?? ''}
         />
       </View>

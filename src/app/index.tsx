@@ -1264,7 +1264,7 @@ const verticalTumbleX = settlingCoinRotateX.interpolate({
 
   {/* Right Balance Display Box with Brutalist Hard Shadow */}
  <WalletNavbarMenu
-  balanceLabel={walletLoading ? '...' : balance.toFixed(1)}
+  balanceLabel={walletLoading ? '...' : balance.toFixed(2)}
   walletAddress={walletKey?.toBase58() ?? ''}
  />
 </View>
@@ -1552,7 +1552,7 @@ const verticalTumbleX = settlingCoinRotateX.interpolate({
         </Pressable>
 
         <WalletNavbarMenu
-          balanceLabel={balance.toFixed(1)}
+          balanceLabel={balance.toFixed(2)}
           walletAddress={walletKey?.toBase58() ?? ''}
         />
       </View>

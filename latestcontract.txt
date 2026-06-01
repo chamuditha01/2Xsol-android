@@ -428,14 +428,15 @@ fn process_settle(
         history.serialize(&mut &mut history_data[..])?;
 
         solana_program::msg!(
-            "FLIP_RESULT: game_id={}, seed_a={:?}, seed_b={:?}, server_seed={:?}, server_hash={:?}, winner_side={}",
-            game_data.game_id,
-            game_data.client_seed_a,
-            game_data.client_seed_b,
-            server_seed,
-            game_data.server_hash,
-            flip_result
-        );
+    "FLIP_RESULT: game_id={}, seed_a={:?}, seed_b={:?}, server_seed={:?}, server_hash={:?}, winner_side={}, winner={}",
+    game_data.game_id,
+    game_data.client_seed_a,
+    game_data.client_seed_b,
+    server_seed,
+    game_data.server_hash,
+    flip_result,
+    winner_key
+);
     } else {
         let total_pool = game_data
             .amount

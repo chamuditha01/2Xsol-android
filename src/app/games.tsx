@@ -728,7 +728,7 @@ const applySettlementResult = useCallback((history: HistoryItem) => {
         </Pressable>
 
         <WalletNavbarMenu
-          balanceLabel={walletLoading ? '...' : balance.toFixed(1)}
+          balanceLabel={walletLoading ? '...' : balance.toFixed(2)}
           walletAddress={walletKey?.toBase58() ?? ''}
         />
       </View>
@@ -826,7 +826,7 @@ const applySettlementResult = useCallback((history: HistoryItem) => {
             </Pressable>
 
             <WalletNavbarMenu
-              balanceLabel={balance.toFixed(1)}
+              balanceLabel={balance.toFixed(2)}
               walletAddress={walletKey?.toBase58() ?? ''}
             />
           </View>

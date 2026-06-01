@@ -236,7 +236,7 @@ export default function LeaderboardScreen() {
         </Pressable>
 
         <WalletNavbarMenu
-          balanceLabel={walletLoading ? '...' : walletBalance.toFixed(1)}
+          balanceLabel={walletLoading ? '...' : walletBalance.toFixed(2)}
           walletAddress={walletAddress}
         />
       </View>
