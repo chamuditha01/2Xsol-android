@@ -1357,6 +1357,14 @@ const verticalTumbleX = settlingCoinRotateX.interpolate({
   </TouchableOpacity>
 </View>
 
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={s.joinActiveGameLink}
+            onPress={() => router.push('/games')}
+          >
+            <Text style={s.joinActiveGameLinkText}>Join an active game</Text>
+          </TouchableOpacity>
+
         </View>
 
         {/*<View style={s.section}> ── ACTIVE LOBBIES ───────────────────────────────────────────────── */}
@@ -1651,7 +1659,7 @@ const s = StyleSheet.create({
     borderWidth: 0,
   },
   btnCreateText: {
-   fontFamily: 'Orbitron',
+    fontFamily: 'Orbitron-SemiBold',
     fontSize: 30,
     color: '#000000',
 
@@ -1663,6 +1671,19 @@ const s = StyleSheet.create({
   },
   btnDisabled: {
     opacity: 0.5,
+  },
+  joinActiveGameLink: {
+    alignSelf: 'center',
+    marginTop: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  joinActiveGameLinkText: {
+    fontFamily: 'Orbitron-SemiBold',
+    fontSize: 12,
+    color: 'white',
+    letterSpacing: 1,
+ 
   },
   btnDanger:    { borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, borderWidth: 1, borderColor: C.danger, alignItems: 'center' },
   btnDangerText:{ fontFamily: 'Orbitron', fontSize: 12, color: C.danger },
@@ -1793,7 +1814,7 @@ const s = StyleSheet.create({
     borderColor: '#D1FF00',     // Neon lime boundary highlight
   },
   quickBtnText: {
-    fontFamily: 'Orbitron',
+    fontFamily: 'Orbitron-SemiBold',
     fontSize: 14,
     color: '#FFFFFF',
   },
@@ -1887,7 +1908,7 @@ const s = StyleSheet.create({
     marginTop: 0
   },
   resultWonAmountText: {
-    fontFamily: 'Orbitron',
+    fontFamily: 'Orbitron-SemiBold',
     color:"white",
     fontSize: 28,
     
@@ -1933,7 +1954,7 @@ const s = StyleSheet.create({
     borderWidth: 0,
   },
   btnClaimText: {
-    fontFamily: 'Orbitron',
+    fontFamily: 'Orbitron-SemiBold',
     textAlign:'center',
     fontSize: 28,
     fontWeight: '600',
@@ -2071,7 +2092,7 @@ fontFamily: 'Orbitron',
     borderColor: '#FFFFFF',
   },
   sideBtnText: {
-    fontFamily: 'Orbitron',
+    fontFamily: 'Orbitron-SemiBold',
     fontSize: 20,               // Scaled down slightly from 24 to look perfectly centered in the shorter box
     letterSpacing: 0.5,
     ...Platform.select({
@@ -2125,7 +2146,8 @@ wagerLabel: {
   },
   wagerInput: {
     flex: 1,
-   fontFamily: 'Orbitron',
+   fontFamily: 'Orbitron-ExtraBold', // Use the extra bold variant for maximum thickness
+   
     fontSize: 26,
     color: '#151618',           // Sharp dark value text
     padding: 0,                 // Eliminates platform-default text paddings
@@ -2165,7 +2187,7 @@ wagerLabel: {
   },
 
   inputTicker: {
-    fontFamily: Platform.OS === 'android' ? 'Orbitron' : 'Orbitron',
+    fontFamily: 'Orbitron-ExtraBold',
     fontSize: 25,
     color: '#151618',           // Sharp dark label text
     letterSpacing: 0.5,

@@ -1,0 +1,520 @@
+use borsh::{BorshDeserialize, BorshSerialize};
+use solana_program::{
+    account_info::{next_account_info, AccountInfo},
+    entrypoint,
+    entrypoint::ProgramResult,
+    program::{invoke, invoke_signed},
+    program_error::ProgramError,
+    pubkey::Pubkey,
+    rent::Rent,
+    system_instruction,
+    sysvar::Sysvar,
+};
+
+// =============================================================================
+// 1. CONSTANTS
+// =============================================================================
+
+pub const COMMISSION_ADDRESS: Pubkey =
+    solana_program::pubkey!("BYu8VNtcijm69zaCpkRcRarpeCxkPcDFiG8eoNzwxNxS");
+
+pub const SETTLER_AUTHORITY: Pubkey =
+    solana_program::pubkey!("3FSdF5cDCjkEsrcLEeCDkNBkLLHtpbSiqpxTbcENnydJ");
+
+pub const MIN_BET: u64 = 10_000_000; // 0.01 SOL
+pub const MAX_BET: u64 = 10_000_000_000; // 10 SOL
+
+// =============================================================================
+// 2. STATE STRUCTS
+// =============================================================================
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
+pub struct Game {
+    pub player_one: Pubkey,
+    pub player_two: Pubkey,
+    pub amount: u64,
+    pub player_one_side: u8,
+    pub status: u8, // 1 = Open, 2 = Joined, 3 = Settled
+    pub padding: [u8; 6],
+    pub game_id: u64,
+    pub server_hash: [u8; 32],
+    pub client_seed_a: [u8; 32],
+    pub client_seed_b: [u8; 32],
+}
+
+pub const GAME_SIZE: usize = 200;
+
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
+pub struct GameHistory {
+    pub game_id: u64,
+    pub player_one: Pubkey,
+    pub player_two: Pubkey,
+    pub amount: u64,
+    pub winner: Pubkey,
+    pub winner_side: u8,
+    pub player_one_side: u8,
+    pub padding: [u8; 6],
+    pub server_seed: [u8; 32],
+    pub server_hash: [u8; 32],
+    pub client_seed_a: [u8; 32],
+    pub client_seed_b: [u8; 32],
+    pub flip_byte: u8,
+    pub padding2: [u8; 7],
+    pub timestamp_slot: u64,
+}
+
+pub const HISTORY_SIZE: usize = 280;
+
+// =============================================================================
+// 3. INSTRUCTIONS
+// =============================================================================
+
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
+pub enum CoinflipInstruction {
+    CreateGame {
+        game_id: u64,
+        amount: u64,
+        side: u8,
+        server_hash: [u8; 32],
+        client_seed_a: [u8; 32],
+    },
+    JoinGame {
+        client_seed_b: [u8; 32],
+    },
+    SettleFlip {
+        server_seed: [u8; 32],
+    },
+    CancelGame,
+}
+
+// =============================================================================
+// 4. ENTRYPOINT
+// =============================================================================
+
+entrypoint!(process_instruction);
+
+pub fn process_instruction(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    instruction_data: &[u8],
+) -> ProgramResult {
+    let instruction = CoinflipInstruction::try_from_slice(instruction_data)
+        .map_err(|_| ProgramError::InvalidInstructionData)?;
+
+    match instruction {
+        CoinflipInstruction::CreateGame {
+            game_id,
+            amount,
+            side,
+            server_hash,
+            client_seed_a,
+        } => process_create_game(
+            program_id,
+            accounts,
+            game_id,
+            amount,
+            side,
+            server_hash,
+            client_seed_a,
+        ),
+
+        CoinflipInstruction::JoinGame { client_seed_b } => {
+            process_join(program_id, accounts, client_seed_b)
+        }
+
+        CoinflipInstruction::SettleFlip { server_seed } => {
+            process_settle(program_id, accounts, server_seed)
+        }
+
+        CoinflipInstruction::CancelGame => process_cancel_game(program_id, accounts),
+    }
+}
+
+// =============================================================================
+// 5. PROCESSORS
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// CREATE GAME
+fn process_create_game(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    game_id: u64,
+    amount: u64,
+    side: u8,
+    server_hash: [u8; 32],
+    client_seed_a: [u8; 32],
+) -> ProgramResult {
+    let iter = &mut accounts.iter();
+    let game_pda = next_account_info(iter)?;
+    let player_one = next_account_info(iter)?;
+    let system_prog = next_account_info(iter)?;
+
+    if !player_one.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    if side != 0 && side != 1 {
+        return Err(ProgramError::InvalidArgument);
+    }
+
+    if amount < MIN_BET || amount > MAX_BET {
+        return Err(ProgramError::InvalidArgument);
+    }
+
+    let (expected_pda, bump) = Pubkey::find_program_address(
+        &[b"game", player_one.key.as_ref(), &game_id.to_le_bytes()],
+        program_id,
+    );
+    if expected_pda != *game_pda.key {
+        return Err(ProgramError::InvalidSeeds);
+    }
+
+    let rent = Rent::get()?;
+    let rent_lamports = rent.minimum_balance(GAME_SIZE);
+
+    // 1. Create the PDA account via CPI
+    invoke_signed(
+        &system_instruction::create_account(
+            player_one.key,
+            game_pda.key,
+            rent_lamports,
+            GAME_SIZE as u64,
+            program_id,
+        ),
+        &[player_one.clone(), game_pda.clone(), system_prog.clone()],
+        &[&[
+            b"game",
+            player_one.key.as_ref(),
+            &game_id.to_le_bytes(),
+            &[bump],
+        ]],
+    )?;
+    // ↑ CPI returns here — system program releases its borrow on game_pda
+
+    // 2. Serialize game state into the new account
+    //    Wrapped in its own scope so borrow_mut() is fully dropped
+    //    before the transfer CPI below tries to borrow game_pda again.
+    {
+        let game_state = Game {
+            player_one: *player_one.key,
+            player_two: Pubkey::default(),
+            amount,
+            player_one_side: side,
+            status: 1,
+            padding: [0u8; 6],
+            game_id,
+            server_hash,
+            client_seed_a,
+            client_seed_b: [0u8; 32],
+        };
+
+        let mut account_data = game_pda.data.borrow_mut();
+        account_data.fill(0);
+        game_state.serialize(&mut &mut account_data[..])?;
+    } // ← borrow_mut dropped here
+
+    // 3. Transfer player's bet into the PDA
+    //    This CPI needs to borrow game_pda for lamport accounting.
+    //    Only safe after the scope above has released borrow_mut.
+    invoke(
+        &system_instruction::transfer(player_one.key, game_pda.key, amount),
+        &[player_one.clone(), game_pda.clone(), system_prog.clone()],
+    )?;
+
+    solana_program::msg!(
+        "CREATE: game_id={}, player_one={}, amount={}, side={}",
+        game_id,
+        player_one.key,
+        amount,
+        side
+    );
+
+    Ok(())
+}
+
+// -----------------------------------------------------------------------------
+// JOIN GAME
+// -----------------------------------------------------------------------------
+fn process_join(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    client_seed_b: [u8; 32],
+) -> ProgramResult {
+    let iter = &mut accounts.iter();
+    let game_pda = next_account_info(iter)?;
+    let player_two = next_account_info(iter)?;
+    let system_prog = next_account_info(iter)?;
+
+    if !player_two.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    if game_pda.owner != program_id {
+        return Err(ProgramError::IllegalOwner);
+    }
+
+    let mut game_data = Game::deserialize(&mut &game_pda.data.borrow()[..])
+        .map_err(|_| ProgramError::InvalidAccountData)?;
+
+    if game_data.status != 1 {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    if *player_two.key == game_data.player_one {
+        return Err(ProgramError::InvalidArgument);
+    }
+
+    invoke(
+        &system_instruction::transfer(player_two.key, game_pda.key, game_data.amount),
+        &[player_two.clone(), game_pda.clone(), system_prog.clone()],
+    )?;
+
+    game_data.player_two = *player_two.key;
+    game_data.client_seed_b = client_seed_b;
+    game_data.status = 2;
+
+    // FIX: Zero out the entire 200-byte account data allocation before re-serializing
+    // to prevent corrupt data remnants in the trailing padding region.
+    let mut data = game_pda.data.borrow_mut();
+    data.fill(0);
+    game_data.serialize(&mut &mut data[..])?;
+
+    solana_program::msg!(
+        "JOIN: game_id={}, player_two={}",
+        game_data.game_id,
+        player_two.key
+    );
+
+    Ok(())
+}
+
+// -----------------------------------------------------------------------------
+// SETTLE FLIP
+// -----------------------------------------------------------------------------
+fn process_settle(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    server_seed: [u8; 32],
+) -> ProgramResult {
+    let iter = &mut accounts.iter();
+    let settler_acc = next_account_info(iter)?;
+    let game_pda = next_account_info(iter)?;
+    let history_pda = next_account_info(iter)?;
+    let player_one_info = next_account_info(iter)?;
+    let player_two_info = next_account_info(iter)?;
+    let commission_acc = next_account_info(iter)?;
+    let system_prog = next_account_info(iter)?;
+
+    if *settler_acc.key != SETTLER_AUTHORITY {
+        return Err(ProgramError::IllegalOwner);
+    }
+    if !settler_acc.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    if game_pda.owner != program_id {
+        return Err(ProgramError::IllegalOwner);
+    }
+
+    let game_data = Game::deserialize(&mut &game_pda.data.borrow()[..])
+        .map_err(|_| ProgramError::InvalidAccountData)?;
+
+    if game_data.status != 2 {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    if *player_one_info.key != game_data.player_one {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    if *player_two_info.key != game_data.player_two {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    if *commission_acc.key != COMMISSION_ADDRESS {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    let computed_hash = solana_program::hash::hash(&server_seed).to_bytes();
+    let is_fair = computed_hash == game_data.server_hash;
+
+    if is_fair {
+        let mut combined = Vec::with_capacity(96);
+        combined.extend_from_slice(&server_seed);
+        combined.extend_from_slice(&game_data.client_seed_a);
+        combined.extend_from_slice(&game_data.client_seed_b);
+
+        let final_hash = solana_program::hash::hash(&combined);
+        let flip_byte = final_hash.to_bytes()[0];
+        let flip_result = (flip_byte % 2) as u8;
+
+        let total_pool = game_data
+            .amount
+            .checked_mul(2)
+            .ok_or(ProgramError::InvalidAccountData)?;
+        let commission = total_pool / 100; // 1%
+        let winner_prize = total_pool
+            .checked_sub(commission)
+            .ok_or(ProgramError::InvalidAccountData)?;
+
+        let winner_is_p1 = flip_result == game_data.player_one_side;
+        let winner_acc = if winner_is_p1 {
+            player_one_info
+        } else {
+            player_two_info
+        };
+        let winner_key = *winner_acc.key;
+
+        **game_pda.try_borrow_mut_lamports()? -= winner_prize;
+        **winner_acc.try_borrow_mut_lamports()? += winner_prize;
+
+        **game_pda.try_borrow_mut_lamports()? -= commission;
+        **commission_acc.try_borrow_mut_lamports()? += commission;
+
+        let game_id_bytes = game_data.game_id.to_le_bytes();
+        let (expected_history, history_bump) = Pubkey::find_program_address(
+            &[b"history", game_data.player_one.as_ref(), &game_id_bytes],
+            program_id,
+        );
+        if expected_history != *history_pda.key {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        let rent = Rent::get()?;
+        let history_rent = rent.minimum_balance(HISTORY_SIZE);
+
+        invoke_signed(
+            &system_instruction::create_account(
+                settler_acc.key,
+                history_pda.key,
+                history_rent,
+                HISTORY_SIZE as u64,
+                program_id,
+            ),
+            &[
+                settler_acc.clone(),
+                history_pda.clone(),
+                system_prog.clone(),
+            ],
+            &[&[
+                b"history",
+                game_data.player_one.as_ref(),
+                &game_id_bytes,
+                &[history_bump], // FIXED: Changed &history_bump to &[history_bump]
+            ]],
+        )?;
+
+        let clock = solana_program::clock::Clock::get()?;
+        let history = GameHistory {
+            game_id: game_data.game_id,
+            player_one: game_data.player_one,
+            player_two: game_data.player_two,
+            amount: game_data.amount,
+            winner: winner_key,
+            winner_side: flip_result,
+            player_one_side: game_data.player_one_side,
+            padding: [0u8; 6],
+            server_seed,
+            server_hash: game_data.server_hash,
+            client_seed_a: game_data.client_seed_a,
+            client_seed_b: game_data.client_seed_b,
+            flip_byte,
+            padding2: [0u8; 7],
+            timestamp_slot: clock.slot,
+        };
+
+        let mut history_data = history_pda.data.borrow_mut();
+        history_data.fill(0);
+        history.serialize(&mut &mut history_data[..])?;
+
+        solana_program::msg!(
+            "FLIP_RESULT: game_id={}, seed_a={:?}, seed_b={:?}, server_seed={:?}, server_hash={:?}, winner_side={}",
+            game_data.game_id,
+            game_data.client_seed_a,
+            game_data.client_seed_b,
+            server_seed,
+            game_data.server_hash,
+            flip_result
+        );
+    } else {
+        let total_pool = game_data
+            .amount
+            .checked_mul(2)
+            .ok_or(ProgramError::InvalidAccountData)?;
+        let pda_balance = game_pda.lamports();
+        let rent_lamports = pda_balance.saturating_sub(total_pool);
+
+        **game_pda.try_borrow_mut_lamports()? -= game_data.amount;
+        **player_one_info.try_borrow_mut_lamports()? += game_data.amount;
+
+        **game_pda.try_borrow_mut_lamports()? -= game_data.amount;
+        **player_two_info.try_borrow_mut_lamports()? += game_data.amount;
+
+        if rent_lamports > 0 {
+            **game_pda.try_borrow_mut_lamports()? -= rent_lamports;
+            **player_one_info.try_borrow_mut_lamports()? += rent_lamports;
+        }
+
+        solana_program::msg!(
+            "REFUND: game_id={}, reason=hash_mismatch, player_one={}, player_two={}, amount={}",
+            game_data.game_id,
+            game_data.player_one,
+            game_data.player_two,
+            game_data.amount
+        );
+    }
+
+    let dust = game_pda.lamports();
+    if dust > 0 {
+        **game_pda.try_borrow_mut_lamports()? -= dust;
+        **player_one_info.try_borrow_mut_lamports()? += dust;
+    }
+
+    let mut data = game_pda.data.borrow_mut();
+    data.fill(0);
+
+    Ok(())
+}
+
+// -----------------------------------------------------------------------------
+// CANCEL GAME
+// -----------------------------------------------------------------------------
+fn process_cancel_game(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+    let iter = &mut accounts.iter();
+    let game_pda = next_account_info(iter)?;
+    let player_one = next_account_info(iter)?;
+
+    if !player_one.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    if game_pda.owner != program_id {
+        return Err(ProgramError::IllegalOwner);
+    }
+
+    let game_data = Game::deserialize(&mut &game_pda.data.borrow()[..])
+        .map_err(|_| ProgramError::InvalidAccountData)?;
+
+    if game_data.player_one != *player_one.key {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    if game_data.status != 1 {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    let total_lamports = game_pda.lamports();
+    **game_pda.try_borrow_mut_lamports()? -= total_lamports;
+    **player_one.try_borrow_mut_lamports()? += total_lamports;
+
+    let mut data = game_pda.data.borrow_mut();
+    data.fill(0);
+
+    solana_program::msg!(
+        "CANCEL: game_id={}, player_one={}, refund={}",
+        game_data.game_id,
+        player_one.key,
+        total_lamports
+    );
+
+    Ok(())
+}

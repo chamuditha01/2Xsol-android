@@ -92,14 +92,14 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
   },
   headerBalanceVal: {
-    fontFamily: 'Orbitron',
+    fontFamily: 'Orbitron-SemiBold',
     fontSize: 14,
     fontWeight: '600',
     color: '#151618',
     letterSpacing: -0.5,
   },
   headerBalanceTicker: {
-    fontFamily: 'Orbitron',
+    fontFamily: 'Orbitron-SemiBold',
     fontSize: 14,
     fontWeight: '600',
     color: '#151618',

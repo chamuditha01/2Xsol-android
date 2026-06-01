@@ -72,7 +72,10 @@ const serializeKeypair   = (kp: web3.Keypair) => JSON.stringify(Array.from(kp.se
 const deserializeKeypair = (s: string) => web3.Keypair.fromSecretKey(Uint8Array.from(JSON.parse(s)));
 
 async function safeGet(key: string): Promise<string | null> {
-  try { return await SecureStore.getItemAsync(key); } catch {}
+  try {
+    const stored = await SecureStore.getItemAsync(key);
+    if (stored != null) return stored;
+  } catch {}
   return AsyncStorage.getItem(key);
 }
 

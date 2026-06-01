@@ -19,6 +19,9 @@ export default function TabLayout() {
   // ─── LOAD CUSTOM BINARY FONT ASSETS ──────────────────────────────────────
   const [loaded, error] = useFonts({
     'Orbitron': require('../../assets/fonts/Orbitron-Regular.ttf'),
+    'Orbitron-Bold': require('../../assets/fonts/Orbitron-Bold.ttf'),
+    'Orbitron-ExtraBold': require('../../assets/fonts/Orbitron-ExtraBold.ttf'),
+    'Orbitron-SemiBold': require('../../assets/fonts/Orbitron-SemiBold.ttf'),
   });
 
   // ─── ERROR TRACKING LOG ──────────────────────────────────────────────────

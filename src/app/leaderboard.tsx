@@ -113,6 +113,10 @@ export default function LeaderboardScreen() {
       }
 
       if (!stored) {
+        stored = await AsyncStorage.getItem(LOCAL_WALLET_KEY);
+      }
+
+      if (!stored) {
         setWalletBalance(0);
         return;
       }
@@ -404,7 +408,7 @@ const s = StyleSheet.create({
     backgroundColor: '#3b432a', // Dark forest tint matching line vectors in image
   },
   screenHeadingTitle: {
-    fontFamily: 'Orbitron',
+    fontFamily: 'Orbitron-SemiBold',
     fontSize: 16,
     color: '#FFFFFF',
     textAlign: 'center',
@@ -435,13 +439,13 @@ const s = StyleSheet.create({
     gap: 1,
   },
   rankDisplayTitle: {
-    fontFamily: 'Orbitron',
+    fontFamily: 'Orbitron-SemiBold',
     fontSize: 16,
     color: '#FFFFFF',
     textTransform: 'lowercase',
   },
   addressLabelText: {
-    fontFamily: 'Orbitron',
+    fontFamily: 'Orbitron-SemiBold',
     fontSize: 15,
     color: '#C3F306',
   },
@@ -453,13 +457,13 @@ const s = StyleSheet.create({
     borderRadius: 0,
   },
   scoreBadgeText: {
-    fontFamily: 'Orbitron',
+    fontFamily: 'Orbitron-SemiBold',
     fontSize: 16,
     color: '#151618',
     fontWeight: '600',
   },
   fallbackNoDataText: {
-    fontFamily: 'Orbitron',
+    fontFamily: 'Orbitron-SemiBold',
     fontSize: 12,
     color: '#5a6a7a',
     textAlign: 'center',
@@ -549,7 +553,7 @@ const s = StyleSheet.create({
     borderWidth: 0,
   },
   btnCreateNewText: {
-    fontFamily: 'Orbitron',
+    fontFamily: 'Orbitron-SemiBold',
     fontSize: 28, // Large bold low-profile typography sizing metric
     color: '#000000',
     fontWeight: '600',

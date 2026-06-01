@@ -5,12 +5,14 @@ import * as web3 from '@solana/web3.js';
 import bs58 from 'bs58';
 import { Buffer } from 'buffer';
 import * as ExpoLinking from 'expo-linking';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     Linking,
     Platform,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -19,7 +21,9 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { G, Path, Polygon } from 'react-native-svg';
 import nacl from 'tweetnacl';
+import WalletNavbarMenu from '../components/wallet-navbar-menu';
 
 if (typeof (globalThis as any).Buffer === 'undefined') (globalThis as any).Buffer = Buffer;
 
@@ -52,10 +56,11 @@ const secureStorage = {
   getItem: async (key: string) => {
     try {
       const mod = await import('expo-secure-store');
-      return await mod.getItemAsync(key);
+      const stored = await mod.getItemAsync(key);
+      if (stored != null) return stored;
     } catch {
-      return AsyncStorage.getItem(key);
     }
+    return AsyncStorage.getItem(key);
   },
 };
 
@@ -411,6 +416,31 @@ export default function WalletTab() {
 
   return (
     <SafeAreaView style={s.root}>
+      <View style={s.topBar}>
+         <Pressable style={s.brandWrapper} onPress={() => router.push('/')}>
+                  <Svg id="reference-one" width={90} height={76} viewBox="0 0 280.37 153.25">
+                    <Polygon fill="#121314" points="88.99 10.55 20.04 1.63 2.98 60.61 26.28 67.8 7.44 79.17 4.25 151.62 87.17 141.34 122.66 146.25 125.48 134.93 130.67 151.62 184.37 142.25 206.49 150.17 232.7 145.71 252.18 133.6 270.02 111.48 277.39 76.63 267.2 37.76 243.89 14.65 206.76 4.54 183.55 14.19 185.83 8.45 131.13 12.64 128.58 19.65 126.76 12.73 88.99 10.55"/>
+                    <Polygon fill="#FFFFFF" points="48.56 58.96 21.62 50.61 30.73 19.23 79.25 22.47 89.96 41.41 88.55 72.56 44.39 99.42 42.03 110.75 65.59 107.93 64.64 97.63 91.53 92.35 86.13 126.61 20.04 134.66 22.15 87.89 65.55 61.76 64.18 42.32 49.26 43.45 48.56 58.96"/>
+                    <Polygon fill="#FFFFFF" points="91.19 25.48 117.04 27.12 128.39 61.02 140.15 26.82 165.29 25.11 143.09 78.26 165.93 130.54 141.03 134.93 127.85 93.61 115.91 130.8 91.81 127.19 112.7 76.52 91.19 25.48"/>
+                    <Path fill="#c3f306" d="M263.15,78.19c-2.07,20.59-16.39,39.14-16.39,39.14-17.31,12.35-35.26,15.34-35.26,15.34-.95-.27-1.87-.53-2.79-.81-19.8-6-32.08-14.74-35.15-17.09-.5-.38-.76-.59-.76-.59-12.53-22.14-12.95-38.29-12.95-38.29,4.17-21.38,15.81-38.69,15.81-38.69,15.6-11.36,30.64-14.94,33.68-15.58.37-.08.56-.11.56-.11,7.24,1.02,13.6,2.91,18.99,5.09,13.33,5.39,20.73,12.53,20.73,12.53,12.39,19.65,13.53,39.05,13.53,39.05h0Z"/>
+                    <Path fill="#121314" d="M242.26,115.83c-12.46,10.42-28.25,14.79-33.54,16.03-19.8-6-32.08-14.74-35.15-17.09,9.73,6.72,35.35,14.49,35.35,14.49,14.64-2.83,31.62-15,31.62-15l1.72,1.57h0Z"/>
+                    <G>
+                      <Path fill="#121314" d="M236.98,43.63s-11.66-9.34-28.17-13.61c0,0-18.86,6.12-28.2,13.18,0,0-9.66,15.65-13.44,33.06,0,0,.6,12.66,11.17,32.05,0,0-7.26-19.99-7.7-30.71,0,0,6.46-21.22,12.92-30.96,0,0,13.2-9.25,25.89-12.85,0,0,7.7-.11,27.52,9.84h0Z" />
+                      <Path fill="#121314" d="M247.88,73.22s-5.47,17.88-14.69,32.63c0,0-14.24,10.59-29.44,14.85l2.38.76s15.86-3.1,29.13-13.15c0,0,10.54-16.95,13.02-31.74l-.4-3.34h0Z" />
+                      <Path fill="#121314" d="M254.11,65.3c-6.39-21.82-12.16-27.95-12.16-27.95-15.66-11.37-28.66-14.86-32.61-15.72.37-.08.56-.11.56-.11,7.24,1.02,13.6,2.91,18.99,5.09,9.04,4.29,15.24,9.67,15.24,9.67,6.72,9.41,9.87,28.36,9.98,29.02h0Z" />
+                      <Path fill="#121314" d="M242.26,115.83s13.48-20.07,12.92-36.84c0,0-3.04,18.45-14.64,35.27" />
+                      <Path fill="#121314" d="M231.68,55.55l-8.32,8.67c-.4.41-.95.65-1.52.65h-36.84c-.94,0-1.42-1.12-.77-1.8l8.32-8.67c.4-.41.95-.65,1.52-.65h36.84c.94,0,1.42,1.12.77,1.8h0Z" />
+                      <Path fill="#121314" d="M184.23,71.87l8.32,8.67c.4.41.95.65,1.52.65h36.84c.94,0,1.42-1.12.77-1.8l-8.32-8.67c-.4-.41-.95-.65-1.52-.65h-36.84c-.94,0-1.42,1.12-.77,1.8Z" />
+                      <Path fill="#121314" d="M231.68,88.19l-8.32,8.67c-.4.41-.95.65-1.52.65h-36.84c-.94,0-1.42-1.12-.77-1.8l8.32-8.67c.4-.41.95-.65,1.52-.65h36.84c.94,0,1.42,1.12.77,1.8Z" />
+                    </G>
+                  </Svg>
+                </Pressable>
+
+        <WalletNavbarMenu
+          balanceLabel={loadingWallet ? '...' : appWalletBalance.toFixed(1)}
+          walletAddress={appWalletAddress ?? ''}
+        />
+      </View>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         
         {/* HEAD TITLE AREA */}
@@ -532,6 +562,18 @@ const s = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: C.bg,
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 6,
+  },
+  brandWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   scroll: {
     paddingHorizontal: 24,
