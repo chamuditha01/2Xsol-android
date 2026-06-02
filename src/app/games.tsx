@@ -2,13 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as web3 from '@solana/web3.js';
 import * as borsh from 'borsh';
 import bs58 from 'bs58';
-import { router } from 'expo-router';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Animated,
-  Easing,
   FlatList,
   Modal,
   Pressable,
@@ -21,6 +19,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { G, Path, Polygon } from 'react-native-svg';
 import WalletNavbarMenu from '../components/wallet-navbar-menu';
+
+const coinVideo = require('../../assets/videos/coin 2 (1).mp4');
+const sideHVideo = require('../../assets/videos/sideH.mp4');
+const sideTVideo = require('../../assets/videos/sideT.mp4');
 
 // ─── Configuration References (Synced with index.tsx) ──────────────────────
 const PROGRAM_ID = new web3.PublicKey(
@@ -152,7 +154,7 @@ export default function games() {
   const [openGames, setOpenGames] = useState<OpenGame[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
-  const [phase, setPhase] = useState<'idle' | 'joined' | 'settling' | 'done'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'joined' | 'settling' | 'showing_result_video' | 'done'>('idle');
   const [activeGameMessage, setActiveGameMessage] = useState('');
   const [resultModal, setResultModal] = useState<'WON' | 'LOST' | null>(null);
   const [resultAmount, setResultAmount] = useState(0);
@@ -171,31 +173,24 @@ export default function games() {
     winnerSide: number;
   } | null>(null);
 
-  const coinAnim = useRef(new Animated.Value(0)).current;
-  const flipLoop = useRef<Animated.CompositeAnimation | null>(null);
-  const flipping = phase === 'joined' || phase === 'settling';
-const walletKeyRef = useRef<web3.PublicKey | null>(null);
+  const [wonState, setWonState] = useState(false);
 
+  const settlingPlayer = useVideoPlayer(coinVideo, (player) => {
+    player.loop = true;
+    player.play();
+  });
+
+  const sideHPlayer = useVideoPlayer(sideHVideo, (player) => {
+    player.loop = false;
+  });
+
+  const sideTPlayer = useVideoPlayer(sideTVideo, (player) => {
+    player.loop = false;
+  });
+
+  const walletKeyRef = useRef<web3.PublicKey | null>(null);
 
   useEffect(() => { walletKeyRef.current = walletKey; }, [walletKey]);
-
-  useEffect(() => {
-    if (flipping) {
-      flipLoop.current = Animated.loop(Animated.sequence([
-        Animated.timing(coinAnim, { toValue: 1, duration: 600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(coinAnim, { toValue: 0, duration: 600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]));
-      flipLoop.current.start();
-    } else {
-      flipLoop.current?.stop();
-      coinAnim.setValue(0);
-    }
-    return () => flipLoop.current?.stop();
-  }, [flipping, coinAnim]);
-
-  const coinScaleY = coinAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0.05, 1] });
-  const settlingCoinTranslateY = coinAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [120, 0, -120] });
-  const settlingCoinRotateX = useRef(new Animated.Value(0)).current;
 
   // ─── Restore Wallet Credentials ───────────────────────────────────────────
   const loadWallet = useCallback(async () => {
@@ -348,19 +343,37 @@ const walletKeyRef = useRef<web3.PublicKey | null>(null);
     clearSettlingWatchers();
   }, [clearSettlingWatchers]);
 
-const applySettlementResult = useCallback((history: HistoryItem) => {
-    const won = (() => {
-    try { return !!walletKeyRef.current && new web3.PublicKey(history.winner).equals(walletKeyRef.current); }
-    catch { return history.winner === walletKeyRef.current?.toBase58(); }
-  })();
+  const triggerResultSequence = useCallback((won: boolean, side: number, amount: number) => {
     clearSettlingWatchers();
-    setResultSide(history.winnerSide === 'HEADS' ? 0 : 1);
-    setResultAmount(history.amount);
-    setResultModal(won ? 'WON' : 'LOST');
-    setActiveGameMessage(won ? 'SETTLED: YOU WON' : 'SETTLED: YOU LOST');
-    setPhase('done');
     void AsyncStorage.removeItem(ACTIVE_GAME_KEY);
-  }, [clearSettlingWatchers]);
+
+    setWonState(won);
+    setResultSide(side);
+    if (side === 0) {
+      sideHPlayer.currentTime = 0;
+      sideHPlayer.play();
+    } else {
+      sideTPlayer.currentTime = 0;
+      sideTPlayer.play();
+    }
+
+    setPhase('showing_result_video');
+    setActiveGameMessage(won ? 'SETTLED: YOU WON' : 'SETTLED: YOU LOST');
+
+    setTimeout(() => {
+      setResultAmount(amount);
+      setResultModal(won ? 'WON' : 'LOST');
+      setPhase('done');
+    }, 3000);
+  }, [clearSettlingWatchers, sideHPlayer, sideTPlayer]);
+
+  const applySettlementResult = useCallback((history: HistoryItem) => {
+    const won = (() => {
+      try { return !!walletKeyRef.current && new web3.PublicKey(history.winner).equals(walletKeyRef.current); }
+      catch { return history.winner === walletKeyRef.current?.toBase58(); }
+    })();
+    triggerResultSequence(won, history.winnerSide === 'HEADS' ? 0 : 1, history.amount);
+  }, [triggerResultSequence]);
 
   const startSettlementPoll = useCallback((gameId: number) => {
     clearSettlementPoll();
@@ -435,13 +448,8 @@ const applySettlementResult = useCallback((history: HistoryItem) => {
         won,
       });
 
-      clearSettlingWatchers();
-      setResultSide(logRes.winnerSide);
-      setResultAmount(won ? (joinedWagerLamportsRef.current / web3.LAMPORTS_PER_SOL) : 0);
-      setResultModal(won ? 'WON' : 'LOST');
-      setActiveGameMessage(won ? 'SETTLED: YOU WON' : 'SETTLED: YOU LOST');
-      setPhase('done');
-      void AsyncStorage.removeItem(ACTIVE_GAME_KEY);
+      const amount = won ? (joinedWagerLamportsRef.current / web3.LAMPORTS_PER_SOL) : 0;
+      triggerResultSequence(won, logRes.winnerSide, amount);
       lastFlipResultRef.current = null; // Clear it
       return;
     }
@@ -449,7 +457,7 @@ const applySettlementResult = useCallback((history: HistoryItem) => {
     // Don't fall back to balance check — keep polling for history
     startSettlementPoll(gameId);
     return; // exit, let the poll call applySettlementResult when ready
-  }, [applySettlementResult, clearSettlingWatchers, getHistoryByGameId, startSettlementPoll]);
+  }, [applySettlementResult, triggerResultSequence, clearSettlingWatchers, getHistoryByGameId, startSettlementPoll]);
   const subscribeToJoinedGame = useCallback((pda: web3.PublicKey, gameId: number) => {
     clearJoinedGameWatcher();
 
@@ -664,41 +672,30 @@ const applySettlementResult = useCallback((history: HistoryItem) => {
     );
   };
 
-  const verticalTumbleX = settlingCoinRotateX.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '720deg'],
-  });
-
   if (phase === 'settling') {
     return (
       <View style={s.settlingScreen}>
-        <Animated.View
-          style={[
-            s.settlingCoin,
-            {
-              transform: [
-                { perspective: 1000 },
-                { translateY: settlingCoinTranslateY },
-                { rotateX: verticalTumbleX },
-                { scaleY: coinScaleY },
-              ],
-            },
-          ]}
-        >
-          <Svg width={200} height={215} viewBox="0 0 597.86 643.33">
-            <Path fill="#c3f306" d="M596.49,327.98c-11.95,118.61-94.41,225.51-94.41,225.51-99.74,71.17-203.12,88.36-203.12,88.36-5.45-1.53-10.78-3.06-16.06-4.68-114.05-34.59-184.85-84.9-202.52-98.44-2.89-2.19-4.37-3.41-4.37-3.41C3.84,407.74,1.37,314.75,1.37,314.75,25.38,191.6,92.46,91.86,92.46,91.86,182.33,26.42,268.96,5.79,286.53,2.1c2.13-.45,3.23-.62,3.23-.62,41.69,5.87,78.35,16.77,109.39,29.34,76.79,31.04,119.41,72.19,119.41,72.19,71.37,113.19,77.92,225,77.92,225v-.03Z" />
-            <Path fill="#121314" d="M476.14,544.83c-71.76,60.04-162.74,85.21-193.24,92.34-114.05-34.59-184.85-84.9-202.52-98.44,56.07,38.73,203.69,83.48,203.69,83.48,84.36-16.32,182.18-86.41,182.18-86.41l9.9,9.05v-.03Z" />
-            <G fill="#121314">
-              <Path d="M445.72,128.83s-67.17-53.8-162.29-78.43c0,0-108.65,35.24-162.48,75.94,0,0-55.67,90.18-77.44,190.49,0,0,3.43,72.96,64.33,184.65,0,0-41.83-115.15-44.35-176.96,0,0,37.23-122.27,74.46-178.35,0,0,76.08-53.32,149.15-74.01,0,0,44.35-.65,158.57,56.67h.06Z" />
-              <Path d="M508.55,299.34s-31.53,103.04-84.65,188c0,0-82.04,61.01-169.61,85.53l13.73,4.37s91.37-17.85,167.85-75.77c0,0,60.73-97.64,75.03-182.86l-2.33-19.27h-.03Z" />
-              <Path d="M544.44,253.69c-36.8-125.74-70.06-161.01-70.06-161.01C384.14,27.18,309.26,7.04,286.5,2.1c2.13-.45,3.23-.62,3.23-.62,41.69,5.87,78.35,16.77,109.39,29.34,52.1,24.74,87.83,55.73,87.83,55.73,38.71,54.23,56.87,163.39,57.49,167.17v-.03Z" />
-              <Path d="M476.14,544.83s77.64-115.61,74.43-212.23c0,0-17.51,106.27-84.36,203.18" />
-              <Path d="M415.19,197.53l-47.93,49.97c-2.3,2.38-5.45,3.75-8.77,3.75h-212.26c-5.39,0-8.17-6.47-4.43-10.36l47.93-49.97c2.3-2.38,5.45-3.75,8.77-3.75h212.26c5.39,0,8.17,6.47,4.43,10.36h0Z" />
-              <Path d="M141.84,291.57l47.93,49.97c2.3,2.38,5.45,3.75,8.77,3.75h212.26c5.39,0,8.17-6.47,4.43-10.36l-47.93-49.97c-2.3-2.38-5.45-3.75-8.77-3.75h-212.26c-5.39,0-8.17,6.47-4.43,10.36Z" />
-              <Path d="M415.19,385.58l-47.93,49.97c-2.3,2.38-5.45,3.75-8.77,3.75h-212.26c-5.39,0-8.17-6.47-4.43-10.36l47.93-49.97c2.3,2.38,5.45,3.75,8.77,3.75h212.26c5.39,0,8.17,6.47,4.43,10.36Z" />
-            </G>
-          </Svg>
-        </Animated.View>
+        <VideoView
+          style={s.video}
+          player={settlingPlayer}
+          fullscreenOptions={{ enable: false }}
+          nativeControls={false}
+          contentFit="contain"
+        />
+      </View>
+    );
+  }
+
+  if (phase === 'showing_result_video') {
+    return (
+      <View style={s.settlingScreen}>
+        <VideoView
+          style={s.video}
+          player={resultSide === 0 ? sideHPlayer : sideTPlayer}
+          fullscreenOptions={{ enable: false }}
+          nativeControls={false}
+          contentFit="contain"
+        />
       </View>
     );
   }
@@ -1080,6 +1077,10 @@ const s = StyleSheet.create({
     backgroundColor: '#080b10',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  video: {
+    width: '100%',
+    height: '100%',
   },
   settlingCoin: {
     width: 200,
