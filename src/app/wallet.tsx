@@ -39,8 +39,8 @@ const PHANTOM_DAPP_KEYPAIR_KEY = 'solflip_phantom_dapp_keypair';
 const PHANTOM_ENCRYPTION_PUBLIC_KEY_KEY = 'solflip_phantom_encryption_public_key';
 
 const C = {
-  bg: '#080b10',
-  surface: '#151618',
+  bg: '#000000',
+  surface: '#000000',
   border: '#1c2530',
   accent: '#C3F306', // Precision neon yellow-lime match
   text: '#FFFFFF',

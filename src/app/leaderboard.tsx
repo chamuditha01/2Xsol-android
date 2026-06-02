@@ -334,7 +334,7 @@ export default function LeaderboardScreen() {
 const s = StyleSheet.create({
   rootViewContainer: { 
     flex: 1, 
-    backgroundColor: '#080b10',
+    backgroundColor: '#000000',
     position: 'relative',
   },
   topBar: {

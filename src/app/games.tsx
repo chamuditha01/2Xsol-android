@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as web3 from '@solana/web3.js';
 import * as borsh from 'borsh';
 import bs58 from 'bs58';
+import { router } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -892,7 +893,7 @@ export default function games() {
 const s = StyleSheet.create({
   rootViewContainer: { 
     flex: 1, 
-    backgroundColor: '#080b10' 
+    backgroundColor: '#000000' 
   },
   topBar: {
     flexDirection: 'row',

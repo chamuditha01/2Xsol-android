@@ -4,6 +4,7 @@ import * as borsh from 'borsh';
 import bs58 from 'bs58';
 import { Buffer } from 'buffer';
 import { router } from 'expo-router';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -27,6 +28,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { G, Path, Polygon } from 'react-native-svg';
 import 'react-native-url-polyfill/auto';
 import WalletNavbarMenu from '../components/wallet-navbar-menu';
+
+const coinVideo = require('../../assets/videos/coin 2 (1).mp4');
+const headsVideo = require('../../assets/videos/sideH.mp4');
+const tailsVideo = require('../../assets/videos/sideT.mp4');
+
 
 // ─── Polyfill ────────────────────────────────────────────────────────────────
 if (typeof (globalThis as any).Buffer === 'undefined') (globalThis as any).Buffer = Buffer;
@@ -295,8 +301,8 @@ interface HistoryItem {
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
 const C = {
-  bg:      '#080b10',
-  surface: '#0d1318',
+  bg:      '#000000',
+  surface: '#000000',
   glass:   '#111820',
   border:  '#1c2530',
   accent:  '#14F195',
@@ -334,6 +340,60 @@ export default function HomeScreen() {
   const [resultSide,   setResultSide]   = useState<number | null>(null);
   const [resultAmount, setResultAmount] = useState(0);
   const [selectedHist, setSelectedHist] = useState<HistoryItem | null>(null);
+
+  const [settlementOutcomeVideo, setSettlementOutcomeVideo] = useState<'HEADS' | 'TAILS' | null>(null);
+
+  const settlingPlayer = useVideoPlayer(coinVideo, (player) => {
+    player.loop = true;
+    player.play();
+  });
+
+  useEffect(() => {
+    if (phase === 'settling') {
+      if (settlementOutcomeVideo === 'HEADS') {
+        settlingPlayer.loop = false;
+        settlingPlayer.replace(headsVideo);
+        settlingPlayer.currentTime = 0;
+        settlingPlayer.play();
+      } else if (settlementOutcomeVideo === 'TAILS') {
+        settlingPlayer.loop = false;
+        settlingPlayer.replace(tailsVideo);
+        settlingPlayer.currentTime = 0;
+        settlingPlayer.play();
+      } else {
+        settlingPlayer.loop = true;
+        settlingPlayer.replace(coinVideo);
+        settlingPlayer.currentTime = 0;
+        settlingPlayer.play();
+      }
+    } else {
+      settlingPlayer.pause();
+    }
+  }, [settlementOutcomeVideo, phase]);
+
+
+
+  const triggerOutcomeVideoAndShowResult = useCallback((
+    won: boolean,
+    selectedSide: number,
+    amount: number,
+    sysMsg: string
+  ) => {
+    const sideStr = selectedSide === 0 ? 'HEADS' : 'TAILS';
+    setSettlementOutcomeVideo(sideStr);
+
+    setTimeout(() => {
+      setResultSide(selectedSide);
+      setResultAmount(amount);
+      setResultModal(won ? 'WON' : 'LOST');
+      setSystemMsg(sysMsg);
+      setPhase('done');
+      setSettlementOutcomeVideo(null);
+      activePda.current = null;
+      settledRef.current = false;
+    }, 3000);
+  }, []);
+
 
   // ── Refs ─────────────────────────────────────────────────────────────────
   const activePda    = useRef<web3.PublicKey | null>(null);
@@ -650,13 +710,12 @@ const loadWallet = useCallback(async () => {
         won,
       });
 
-      setResultSide(logRes.winnerSide);
-      setResultAmount(won ? parseFloat(wager) : 0);
-      setResultModal(won ? 'WON' : 'LOST');
-      setSystemMsg(won ? 'SETTLED: YOU WON' : 'SETTLED: YOU LOST');
-      setPhase('done');
-      activePda.current = null;
-      settledRef.current = false;
+      triggerOutcomeVideoAndShowResult(
+        won,
+        logRes.winnerSide,
+        won ? parseFloat(wager) : 0,
+        won ? 'SETTLED: YOU WON' : 'SETTLED: YOU LOST'
+      );
       lastFlipResultRef.current = null; // Clear log cache after use
 
       setTimeout(() => { void fetchHistoryRef.current?.(true); }, 3000);
@@ -680,16 +739,16 @@ const loadWallet = useCallback(async () => {
       resultLabel: won ? 'WON' : 'LOST',
     });
 
-    setResultSide(selectedSide);
-    setResultAmount(won ? parseFloat(wager) : 0);
-    setResultModal(won ? 'WON' : 'LOST');
-    setSystemMsg(won ? 'SETTLED: YOU WON' : 'SETTLED: YOU LOST');
-    setPhase('done');
-    activePda.current = null;
-    settledRef.current = false;
+    triggerOutcomeVideoAndShowResult(
+      won,
+      selectedSide,
+      won ? parseFloat(wager) : 0,
+      won ? 'SETTLED: YOU WON' : 'SETTLED: YOU LOST'
+    );
 
     setTimeout(() => { void fetchHistoryRef.current?.(true); }, 3000);
-  }, [clearSettlingWatchers, getHistoryByGameId, refreshBalance, unsubGame, walletKey, wager]);
+  }, [clearSettlingWatchers, getHistoryByGameId, refreshBalance, unsubGame, walletKey, wager, triggerOutcomeVideoAndShowResult]);
+
 
   const subscribeToGame = useCallback((pda: web3.PublicKey) => {
     unsubGame();
@@ -708,7 +767,7 @@ const loadWallet = useCallback(async () => {
 
         if (status === 2) {
           // Both players joined — backend settler will now settle
-          setSystemMsg('OPPONENT_JOINED!');
+          setSystemMsg('JOINED!');
           setPhase('joined');
         }
         // status=1 = still open, waiting
@@ -817,19 +876,21 @@ const loadWallet = useCallback(async () => {
       try { return !!walletKey && new web3.PublicKey(history.winner).equals(walletKey); }
       catch { return history.winner === walletKey?.toBase58(); }
     })();
-    setResultSide(history.winnerSide === 'HEADS' ? 0 : 1);
-    setResultAmount(history.amount);
-    setResultModal(youWon ? 'WON' : 'LOST');
-    setSystemMsg(youWon ? 'SETTLED: YOU WON' : 'SETTLED: YOU LOST');
-    setPhase('done');
-    activePda.current = null;
-    settledRef.current = false;
+    
+    triggerOutcomeVideoAndShowResult(
+      youWon,
+      history.winnerSide === 'HEADS' ? 0 : 1,
+      history.amount,
+      youWon ? 'SETTLED: YOU WON' : 'SETTLED: YOU LOST'
+    );
+
     // cleanup listeners
     if (histSubRef.current !== null) { try { connection.removeProgramAccountChangeListener(histSubRef.current); } catch{} histSubRef.current = null; }
     if (gameSubRef.current !== null) { try { connection.removeAccountChangeListener(gameSubRef.current); } catch{} gameSubRef.current = null; }
     // refresh history list
     setTimeout(() => fetchHistory(true), 500);
-  }, [walletKey, fetchHistory, clearSettlingWatchers]);
+  }, [walletKey, fetchHistory, clearSettlingWatchers, triggerOutcomeVideoAndShowResult]);
+
 
   // Subscribe to program account changes for history PDAs matching gameId
   const subscribeToHistory = useCallback((gameId: number) => {
@@ -1151,53 +1212,19 @@ const verticalTumbleX = settlingCoinRotateX.interpolate({
   // ─────────────────────────────────────────────────────────────────────────
  if (phase === 'settling') {
   return (
-   <View style={s.settlingScreen}>
-      <Animated.View
-        style={[
-          s.settlingCoin,
-          {
-            transform: [
-              { perspective: 1000 },              // Enhances 3D depth perspective for the flip
-              { translateY: settlingCoinTranslateY },
-              { rotateX: verticalTumbleX },       // Locks the spin strictly to the vertical X-Axis
-              { scaleY: coinScaleY },
-            ],
-          },
-        ]}
-      >
-        {/* ─── NATIVE VECTOR ARCADE COIN ASSET ─── */}
-        <Svg width={200} height={215} viewBox="0 0 597.86 643.33">
-          {/* Base Layer: High-Contrast Neon Lime Face Accent Plate */}
-          <Path 
-            fill="#c3f306" 
-            d="M596.49,327.98c-11.95,118.61-94.41,225.51-94.41,225.51-99.74,71.17-203.12,88.36-203.12,88.36-5.45-1.53-10.78-3.06-16.06-4.68-114.05-34.59-184.85-84.9-202.52-98.44-2.89-2.19-4.37-3.41-4.37-3.41C3.84,407.74,1.37,314.75,1.37,314.75,25.38,191.6,92.46,91.86,92.46,91.86,182.33,26.42,268.96,5.79,286.53,2.1c2.13-.45,3.23-.62,3.23-.62,41.69,5.87,78.35,16.77,109.39,29.34,76.79,31.04,119.41,72.19,119.41,72.19,71.37,113.19,77.92,225,77.92,225v-.03Z"
-          />
-          
-          {/* Bottom Hard Edge Drop Shadow Vector Rim */}
-          <Path 
-            fill="#121314" 
-            d="M476.14,544.83c-71.76,60.04-162.74,85.21-193.24,92.34-114.05-34.59-184.85-84.9-202.52-98.44,56.07,38.73,203.69,83.48,203.69,83.48,84.36-16.32,182.18-86.41,182.18-86.41l9.9,9.05v-.03Z"
-          />
-          
-          {/* Main Structural Detail Group Lines & Core Solana Crest */}
-          <G fill="#121314">
-            <Path d="M445.72,128.83s-67.17-53.8-162.29-78.43c0,0-108.65,35.24-162.48,75.94,0,0-55.67,90.18-77.44,190.49,0,0,3.43,72.96,64.33,184.65,0,0-41.83-115.15-44.35-176.96,0,0,37.23-122.27,74.46-178.35,0,0,76.08-53.32,149.15-74.01,0,0,44.35-.65,158.57,56.67h.06Z" />
-            <Path d="M508.55,299.34s-31.53,103.04-84.65,188c0,0-82.04,61.01-169.61,85.53l13.73,4.37s91.37-17.85,167.85-75.77c0,0,60.73-97.64,75.03-182.86l-2.33-19.27h-.03Z" />
-            <Path d="M544.44,253.69c-36.8-125.74-70.06-161.01-70.06-161.01C384.14,27.18,309.26,7.04,286.5,2.1c2.13-.45,3.23-.62,3.23-.62,41.69,5.87,78.35,16.77,109.39,29.34,52.1,24.74,87.83,55.73,87.83,55.73,38.71,54.23,56.87,163.39,57.49,167.17v-.03Z" />
-            <Path d="M476.14,544.83s77.64-115.61,74.43-212.23c0,0-17.51,106.27-84.36,203.18" />
-            
-            {/* Solana Crest Segment: Top Row Parallelogram */}
-            <Path d="M415.19,197.53l-47.93,49.97c-2.3,2.38-5.45,3.75-8.77,3.75h-212.26c-5.39,0-8.17-6.47-4.43-10.36l47.93-49.97c2.3-2.38,5.45-3.75,8.77-3.75h212.26c5.39,0,8.17,6.47,4.43,10.36h0Z" />
-            {/* Solana Crest Segment: Middle Row Parallelogram */}
-            <Path d="M141.84,291.57l47.93,49.97c2.3,2.38,5.45,3.75,8.77,3.75h212.26c5.39,0,8.17-6.47,4.43-10.36l-47.93-49.97c-2.3-2.38-5.45-3.75-8.77-3.75h-212.26c-5.39,0-8.17,6.47-4.43,10.36Z" />
-            {/* Solana Crest Segment: Bottom Row Parallelogram */}
-            <Path d="M415.19,385.58l-47.93,49.97c-2.3,2.38-5.45,3.75-8.77,3.75h-212.26c-5.39,0-8.17-6.47-4.43-10.36l47.93-49.97c2.3,2.38,5.45,3.75,8.77,3.75h212.26c5.39,0,8.17,6.47,4.43,10.36Z" />
-          </G>
-        </Svg>
-      </Animated.View>
+    <View style={s.settlingScreen}>
+      <VideoView
+        style={s.settlingVideo}
+        player={settlingPlayer}
+        fullscreenOptions={{ enable: false }}
+        nativeControls={false}
+        contentFit="contain"
+      />
     </View>
   );
 }
+
+
 
   return (
     <SafeAreaView style={s.root}>
@@ -2323,4 +2350,9 @@ wagerLabel: {
     // backfaceVisibility prevents flickering mid-flip on native platforms
     backfaceVisibility: 'visible', 
   },
+  settlingVideo: {
+    width: '100%',
+    height: '100%',
+  },
 });
+
