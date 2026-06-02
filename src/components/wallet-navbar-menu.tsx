@@ -6,9 +6,10 @@ type WalletNavbarMenuProps = {
   balanceLabel: string;
   walletAddress: string;
   onDisconnect?: () => void | Promise<void>;
+  onRefreshBalance?: () => any;
 };
 
-export default function WalletNavbarMenu({ balanceLabel, walletAddress, onDisconnect }: WalletNavbarMenuProps) {
+export default function WalletNavbarMenu({ balanceLabel, walletAddress, onDisconnect, onRefreshBalance }: WalletNavbarMenuProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
@@ -22,7 +23,7 @@ export default function WalletNavbarMenu({ balanceLabel, walletAddress, onDiscon
       <View style={s.headerBalanceContainer}>
         <View style={s.headerBalanceShadow} />
         <View style={s.headerBalanceMainFrame}>
-          <Pressable style={s.balanceTouchRegion} onPress={() => setOpen(v => !v)}>
+          <Pressable style={s.balanceTouchRegion} onPress={() => { setOpen(v => !v); onRefreshBalance?.(); }}>
             <Text style={s.headerBalanceVal}>{balanceLabel}</Text>
             <Text style={s.headerBalanceTicker}>SOL</Text>
           </Pressable>

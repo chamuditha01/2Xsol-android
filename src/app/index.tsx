@@ -552,7 +552,33 @@ const loadWallet = useCallback(async () => {
     return bal;
   }, [walletKey]);
 
-  useEffect(() => { if (walletKey) void refreshBalance(); }, [walletKey]);
+  useEffect(() => {
+    if (!walletKey) return;
+    void refreshBalance();
+
+    let subId: number | null = null;
+    try {
+      subId = connection.onAccountChange(
+        walletKey,
+        (accountInfo) => {
+          const lamports = accountInfo.lamports;
+          const bal = lamports / web3.LAMPORTS_PER_SOL;
+          setBalance(bal);
+        },
+        'confirmed'
+      );
+    } catch (e) {
+      console.error('Failed to subscribe to balance updates:', e);
+    }
+
+    return () => {
+      if (subId !== null) {
+        try {
+          connection.removeAccountChangeListener(subId);
+        } catch {}
+      }
+    };
+  }, [walletKey, refreshBalance]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // SEND TX (local wallet signs directly — no wallet adapter needed)
@@ -1224,7 +1250,96 @@ const verticalTumbleX = settlingCoinRotateX.interpolate({
   );
 }
 
+  if (phase === 'done') {
+    return (
+      <View style={s.settlingScreen}>
+        <Modal 
+          visible={!!resultModal} 
+          transparent={false} // True native full screen backdrop coverage
+          animationType="fade"
+          onRequestClose={() => { setResultModal(null); setPhase('idle'); }}
+        >  
+          <SafeAreaView style={s.root}>
+            <View style={s.topBar}>
+              <Pressable style={s.brandWrapper} onPress={() => router.push('/')}>
+                <Svg id="reference-one" width={90} height={76} viewBox="0 0 280.37 153.25">
+                  <Polygon fill="#121314" points="88.99 10.55 20.04 1.63 2.98 60.61 26.28 67.8 7.44 79.17 4.25 151.62 87.17 141.34 122.66 146.25 125.48 134.93 130.67 151.62 184.37 142.25 206.49 150.17 232.7 145.71 252.18 133.6 270.02 111.48 277.39 76.63 267.2 37.76 243.89 14.65 206.76 4.54 183.55 14.19 185.83 8.45 131.13 12.64 128.58 19.65 126.76 12.73 88.99 10.55"/>
+                  <Polygon fill="#FFFFFF" points="48.56 58.96 21.62 50.61 30.73 19.23 79.25 22.47 89.96 41.41 88.55 72.56 44.39 99.42 42.03 110.75 65.59 107.93 64.64 97.63 91.53 92.35 86.13 126.61 20.04 134.66 22.15 87.89 65.55 61.76 64.18 42.32 49.26 43.45 48.56 58.96"/>
+                  <Polygon fill="#FFFFFF" points="91.19 25.48 117.04 27.12 128.39 61.02 140.15 26.82 165.29 25.11 143.09 78.26 165.93 130.54 141.03 134.93 127.85 93.61 115.91 130.8 91.81 127.19 112.7 76.52 91.19 25.48"/>
+                  <Path fill="#c3f306" d="M263.15,78.19c-2.07,20.59-16.39,39.14-16.39,39.14-17.31,12.35-35.26,15.34-35.26,15.34-.95-.27-1.87-.53-2.79-.81-19.8-6-32.08-14.74-35.15-17.09-.5-.38-.76-.59-.76-.59-12.53-22.14-12.95-38.29-12.95-38.29,4.17-21.38,15.81-38.69,15.81-38.69,15.6-11.36,30.64-14.94,33.68-15.58.37-.08.56-.11.56-.11,7.24,1.02,13.6,2.91,18.99,5.09,13.33,5.39,20.73,12.53,20.73,12.53,12.39,19.65,13.53,39.05,13.53,39.05h0Z"/>
+                  <Path fill="#121314" d="M242.26,115.83c-12.46,10.42-28.25,14.79-33.54,16.03-19.8-6-32.08-14.74-35.15-17.09,9.73,6.72,35.35,14.49,35.35,14.49,14.64-2.83,31.62-15,31.62-15l1.72,1.57h0Z"/>
+                  <G>
+                    <Path fill="#121314" d="M236.98,43.63s-11.66-9.34-28.17-13.61c0,0-18.86,6.12-28.2,13.18,0,0-9.66,15.65-13.44,33.06,0,0,.6,12.66,11.17,32.05,0,0-7.26-19.99-7.7-30.71,0,0,6.46-21.22,12.92-30.96,0,0,13.2-9.25,25.89-12.85,0,0,7.7-.11,27.52,9.84h0Z" />
+                    <Path fill="#121314" d="M247.88,73.22s-5.47,17.88-14.69,32.63c0,0-14.24,10.59-29.44,14.85l2.38.76s15.86-3.1,29.13-13.15c0,0,10.54-16.95,13.02-31.74l-.4-3.34h0Z" />
+                    <Path fill="#121314" d="M254.11,65.3c-6.39-21.82-12.16-27.95-12.16-27.95-15.66-11.37-28.66-14.86-32.61-15.72.37-.08.56-.11.56-.11,7.24,1.02,13.6,2.91,18.99,5.09,9.04,4.29,15.24,9.67,15.24,9.67,6.72,9.41,9.87,28.36,9.98,29.02h0Z" />
+                    <Path fill="#121314" d="M242.26,115.83s13.48-20.07,12.92-36.84c0,0-3.04,18.45-14.64,35.27" />
+                    <Path fill="#121314" d="M231.68,55.55l-8.32,8.67c-.4.41-.95.65-1.52.65h-36.84c-.94,0-1.42-1.12-.77-1.8l8.32-8.67c.4-.41.95-.65,1.52-.65h36.84c.94,0,1.42,1.12.77,1.8h0Z" />
+                    <Path fill="#121314" d="M184.23,71.87l8.32,8.67c.4.41.95.65,1.52.65h36.84c.94,0,1.42-1.12.77-1.8l-8.32-8.67c-.4-.41-.95-.65-1.52-.65h-36.84c-.94,0-1.42,1.12-.77,1.8Z" />
+                    <Path fill="#121314" d="M231.68,88.19l-8.32,8.67c-.4.41-.95.65-1.52.65h-36.84c-.94,0-1.42-1.12-.77-1.8l8.32-8.67c.4-.41.95-.65,1.52-.65h36.84c.94,0,1.42,1.12.77,1.8Z" />
+                  </G>
+                </Svg>
+              </Pressable>
 
+              <WalletNavbarMenu
+                balanceLabel={balance.toFixed(2)}
+                walletAddress={walletKey?.toBase58() ?? ''}
+                onRefreshBalance={refreshBalance}
+              />
+            </View>
+
+            <View style={s.fullScreenOverlay}>
+              {/* Upper Status Notification Text */}
+              <View style={s.horizontalLineWhite} />
+              <Text style={s.winHeadlineText}>
+                {resultModal === 'WON' ? 'you won!' : 'you lost!'}
+              </Text>
+              
+              <View style={s.horizontalLineWhite} />
+              {resultModal === 'WON' ? (
+                <Text style={s.resultWonAmountText}>{resultAmount.toFixed(2)} SOL</Text>
+              ) : null}
+              {/* Center Stage Static Vector Hero Coin Token */}
+              <View style={s.modalCoinContainer}>
+                <Svg id="reference-one" width={220} height={220} viewBox="0 0 597.86 643.33">
+                  <Path 
+                    fill={resultCoinMainFill}
+                    d="M596.49,327.98c-11.95,118.61-94.41,225.51-94.41,225.51-99.74,71.17-203.12,88.36-203.12,88.36-5.45-1.53-10.78-3.06-16.06-4.68-114.05-34.59-184.85-84.9-202.52-98.44-2.89-2.19-4.37-3.41-4.37-3.41C3.84,407.74,1.37,314.75,1.37,314.75,25.38,191.6,92.46,91.86,92.46,91.86,182.33,26.42,268.96,5.79,286.53,2.1c2.13-.45,3.23-.62,3.23-.62,41.69,5.87,78.35,16.77,109.39,29.34,76.79,31.04,119.41,72.19,119.41,72.19,71.37,113.19,77.92,225,77.92,225v-.03Z"
+                  />
+                  <Path 
+                    fill={resultCoinDetailFill}
+                    d="M476.14,544.83c-71.76,60.04-162.74,85.21-193.24,92.34-114.05-34.59-184.85-84.9-202.52-98.44,56.07,38.73,203.69,83.48,203.69,83.48,84.36-16.32,182.18-86.41,182.18-86.41l9.9,9.05v-.03Z"
+                  />
+                  <G>
+                    <Path fill={resultCoinDetailFill} d="M445.72,128.83s-67.17-53.8-162.29-78.43c0,0-108.65,35.24-162.48,75.94,0,0-55.67,90.18-77.44,190.49,0,0,3.43,72.96,64.33,184.65,0,0-41.83-115.15-44.35-176.96,0,0,37.23-122.27,74.46-178.35,0,0,76.08-53.32,149.15-74.01,0,0,44.35-.65,158.57,56.67h.06Z" />
+                    <Path fill={resultCoinDetailFill} d="M508.55,299.34s-31.53,103.04-84.65,188c0,0-82.04,61.01-169.61,85.53l13.73,4.37s91.37-17.85,167.85-75.77c0,0,60.73-97.64,75.03-182.86l-2.33-19.27h-.03Z" />
+                    <Path fill={resultCoinDetailFill} d="M544.44,253.69c-36.8-125.74-70.06-161.01-70.06-161.01C384.14,27.18,309.26,7.04,286.5,2.1c2.13-.45,3.23-.62,3.23-.62,41.69,5.87,78.35,16.77,109.39,29.34,52.1,24.74,87.83,55.73,87.83,55.73,38.71,54.23,56.87,163.39,57.49,167.17v-.03Z" />
+                    <Path fill={resultCoinDetailFill} d="M476.14,544.83s77.64-115.61,74.43-212.23c0,0-17.51,106.27-84.36,203.18" />
+                    <Path fill={resultCoinDetailFill} d="M415.19,197.53l-47.93,49.97c-2.3,2.38-5.45,3.75-8.77,3.75h-212.26c-5.39,0-8.17-6.47-4.43-10.36l47.93-49.97c2.3-2.38,5.45-3.75,8.77-3.75h212.26c5.39,0,8.17,6.47,4.43,10.36h0Z" />
+                    <Path fill={resultCoinDetailFill} d="M141.84,291.57l47.93,49.97c2.3,2.38,5.45,3.75,8.77,3.75h212.26c5.39,0,8.17-6.47,4.43-10.36l-47.93-49.97c-2.3-2.38-5.45-3.75-8.77-3.75h-212.26c-5.39,0-8.17,6.47-4.43,10.36Z" />
+                    <Path fill={resultCoinDetailFill} d="M415.19,385.58l-47.93,49.97c-2.3,2.38-5.45,3.75-8.77,3.75h-212.26c-5.39,0-8.17-6.47-4.43-10.36l47.93-49.97c-2.3-2.38,5.45-3.75,8.77-3.75h212.26c5.39,0,8.17,6.47,4.43,10.36Z" />
+                  </G>
+                </Svg>
+              </View>
+
+              {/* Bottom Dynamic Action Trigger with Brutalist Hard Shadow */}
+              <View style={s.claimButtonContainer}>
+                <View style={[s.claimButtonShadow, isLoseResult && { backgroundColor: '#8A8D90' }]} />
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  style={[s.btnClaimMain, isLoseResult && { backgroundColor: '#FFFFFF' }]}
+                  onPress={() => { setResultModal(null); setPhase('idle'); void fetchGames(); }}
+                >
+                  <Text style={s.btnClaimText}>
+                    {resultModal === 'WON' ? 'claim win' : 'return'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </SafeAreaView>
+        </Modal>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={s.root}>
@@ -1293,6 +1408,7 @@ const verticalTumbleX = settlingCoinRotateX.interpolate({
  <WalletNavbarMenu
   balanceLabel={walletLoading ? '...' : balance.toFixed(2)}
   walletAddress={walletKey?.toBase58() ?? ''}
+  onRefreshBalance={refreshBalance}
  />
 </View>
 
@@ -1550,112 +1666,7 @@ const verticalTumbleX = settlingCoinRotateX.interpolate({
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* ── RESULT MODAL (DYNAMIC WIN/LOSE FULL SCREEN OVERLAY) ──────────────────────────────────────────────────── */}
-<Modal 
-  visible={!!resultModal} 
-  transparent={false} // True native full screen backdrop coverage
-  animationType="fade"
-  onRequestClose={() => { setResultModal(null); setPhase('idle'); }}
->  
-<SafeAreaView style={s.root}>
-      <View style={s.topBar}>
-        <Pressable style={s.brandWrapper} onPress={() => router.push('/')}>
-          <Svg id="reference-one" width={90} height={76} viewBox="0 0 280.37 153.25">
-            <Polygon fill="#121314" points="88.99 10.55 20.04 1.63 2.98 60.61 26.28 67.8 7.44 79.17 4.25 151.62 87.17 141.34 122.66 146.25 125.48 134.93 130.67 151.62 184.37 142.25 206.49 150.17 232.7 145.71 252.18 133.6 270.02 111.48 277.39 76.63 267.2 37.76 243.89 14.65 206.76 4.54 183.55 14.19 185.83 8.45 131.13 12.64 128.58 19.65 126.76 12.73 88.99 10.55"/>
-            <Polygon fill="#FFFFFF" points="48.56 58.96 21.62 50.61 30.73 19.23 79.25 22.47 89.96 41.41 88.55 72.56 44.39 99.42 42.03 110.75 65.59 107.93 64.64 97.63 91.53 92.35 86.13 126.61 20.04 134.66 22.15 87.89 65.55 61.76 64.18 42.32 49.26 43.45 48.56 58.96"/>
-            <Polygon fill="#FFFFFF" points="91.19 25.48 117.04 27.12 128.39 61.02 140.15 26.82 165.29 25.11 143.09 78.26 165.93 130.54 141.03 134.93 127.85 93.61 115.91 130.8 91.81 127.19 112.7 76.52 91.19 25.48"/>
-            <Path fill="#c3f306" d="M263.15,78.19c-2.07,20.59-16.39,39.14-16.39,39.14-17.31,12.35-35.26,15.34-35.26,15.34-.95-.27-1.87-.53-2.79-.81-19.8-6-32.08-14.74-35.15-17.09-.5-.38-.76-.59-.76-.59-12.53-22.14-12.95-38.29-12.95-38.29,4.17-21.38,15.81-38.69,15.81-38.69,15.6-11.36,30.64-14.94,33.68-15.58.37-.08.56-.11.56-.11,7.24,1.02,13.6,2.91,18.99,5.09,13.33,5.39,20.73,12.53,20.73,12.53,12.39,19.65,13.53,39.05,13.53,39.05h0Z"/>
-            <Path fill="#121314" d="M242.26,115.83c-12.46,10.42-28.25,14.79-33.54,16.03-19.8-6-32.08-14.74-35.15-17.09,9.73,6.72,35.35,14.49,35.35,14.49,14.64-2.83,31.62-15,31.62-15l1.72,1.57h0Z"/>
-            <G>
-              <Path fill="#121314" d="M236.98,43.63s-11.66-9.34-28.17-13.61c0,0-18.86,6.12-28.2,13.18,0,0-9.66,15.65-13.44,33.06,0,0,.6,12.66,11.17,32.05,0,0-7.26-19.99-7.7-30.71,0,0,6.46-21.22,12.92-30.96,0,0,13.2-9.25,25.89-12.85,0,0,7.7-.11,27.52,9.84h0Z" />
-              <Path fill="#121314" d="M247.88,73.22s-5.47,17.88-14.69,32.63c0,0-14.24,10.59-29.44,14.85l2.38.76s15.86-3.1,29.13-13.15c0,0,10.54-16.95,13.02-31.74l-.4-3.34h0Z" />
-              <Path fill="#121314" d="M254.11,65.3c-6.39-21.82-12.16-27.95-12.16-27.95-15.66-11.37-28.66-14.86-32.61-15.72.37-.08.56-.11.56-.11,7.24,1.02,13.6,2.91,18.99,5.09,9.04,4.29,15.24,9.67,15.24,9.67,6.72,9.41,9.87,28.36,9.98,29.02h0Z" />
-              <Path fill="#121314" d="M242.26,115.83s13.48-20.07,12.92-36.84c0,0-3.04,18.45-14.64,35.27" />
-              <Path fill="#121314" d="M231.68,55.55l-8.32,8.67c-.4.41-.95.65-1.52.65h-36.84c-.94,0-1.42-1.12-.77-1.8l8.32-8.67c.4-.41.95-.65,1.52-.65h36.84c.94,0,1.42,1.12.77,1.8h0Z" />
-              <Path fill="#121314" d="M184.23,71.87l8.32,8.67c.4.41.95.65,1.52.65h36.84c.94,0,1.42-1.12.77-1.8l-8.32-8.67c-.4-.41-.95-.65-1.52-.65h-36.84c-.94,0-1.42,1.12-.77,1.8Z" />
-              <Path fill="#121314" d="M231.68,88.19l-8.32,8.67c-.4.41-.95.65-1.52.65h-36.84c-.94,0-1.42-1.12-.77-1.8l8.32-8.67c.4-.41.95-.65,1.52-.65h36.84c.94,0,1.42,1.12.77,1.8Z" />
-            </G>
-          </Svg>
-        </Pressable>
 
-        <WalletNavbarMenu
-          balanceLabel={balance.toFixed(2)}
-          walletAddress={walletKey?.toBase58() ?? ''}
-        />
-      </View>
-
-    
-  <View style={s.fullScreenOverlay}>
-    
-    {/* Upper Status Notification Text */}
-    <View style={s.horizontalLineWhite} />
-    <Text style={s.winHeadlineText}>
-      {resultModal === 'WON' ? 'you won!' : 'you lost!'}
-    </Text>
-    
-    <View style={s.horizontalLineWhite} />
-{resultModal === 'WON' ? (
-      <Text style={s.resultWonAmountText}>{resultAmount.toFixed(2)} SOL</Text>
-    ) : null}
-    {/* Center Stage Static Vector Hero Coin Token */}
-    <View style={s.modalCoinContainer}>
-      <Svg id="reference-one" width={220} height={220} viewBox="0 0 597.86 643.33">
-      {/* Main Solana Coin Neon Fill Base Circle */}
-      <Path 
-        fill={resultCoinMainFill}
-        d="M596.49,327.98c-11.95,118.61-94.41,225.51-94.41,225.51-99.74,71.17-203.12,88.36-203.12,88.36-5.45-1.53-10.78-3.06-16.06-4.68-114.05-34.59-184.85-84.9-202.52-98.44-2.89-2.19-4.37-3.41-4.37-3.41C3.84,407.74,1.37,314.75,1.37,314.75,25.38,191.6,92.46,91.86,92.46,91.86,182.33,26.42,268.96,5.79,286.53,2.1c2.13-.45,3.23-.62,3.23-.62,41.69,5.87,78.35,16.77,109.39,29.34,76.79,31.04,119.41,72.19,119.41,72.19,71.37,113.19,77.92,225,77.92,225v-.03Z"
-      />
-      {/* Secondary Bottom Shadow Lip Overlay */}
-      <Path 
-        fill={resultCoinDetailFill}
-        d="M476.14,544.83c-71.76,60.04-162.74,85.21-193.24,92.34-114.05-34.59-184.85-84.9-202.52-98.44,56.07,38.73,203.69,83.48,203.69,83.48,84.36-16.32,182.18-86.41,182.18-86.41l9.9,9.05v-.03Z"
-      />
-      <G>
-        <Path fill={resultCoinDetailFill} d="M445.72,128.83s-67.17-53.8-162.29-78.43c0,0-108.65,35.24-162.48,75.94,0,0-55.67,90.18-77.44,190.49,0,0,3.43,72.96,64.33,184.65,0,0-41.83-115.15-44.35-176.96,0,0,37.23-122.27,74.46-178.35,0,0,76.08-53.32,149.15-74.01,0,0,44.35-.65,158.57,56.67h.06Z" />
-        <Path fill={resultCoinDetailFill} d="M508.55,299.34s-31.53,103.04-84.65,188c0,0-82.04,61.01-169.61,85.53l13.73,4.37s91.37-17.85,167.85-75.77c0,0,60.73-97.64,75.03-182.86l-2.33-19.27h-.03Z" />
-        <Path fill={resultCoinDetailFill} d="M544.44,253.69c-36.8-125.74-70.06-161.01-70.06-161.01C384.14,27.18,309.26,7.04,286.5,2.1c2.13-.45,3.23-.62,3.23-.62,41.69,5.87,78.35,16.77,109.39,29.34,52.1,24.74,87.83,55.73,87.83,55.73,38.71,54.23,56.87,163.39,57.49,167.17v-.03Z" />
-        <Path fill={resultCoinDetailFill} d="M476.14,544.83s77.64-115.61,74.43-212.23c0,0-17.51,106.27-84.36,203.18" />
-        
-        {/* Top Slanted Horizontal Bar Track */}
-        <Path fill={resultCoinDetailFill} d="M415.19,197.53l-47.93,49.97c-2.3,2.38-5.45,3.75-8.77,3.75h-212.26c-5.39,0-8.17-6.47-4.43-10.36l47.93-49.97c2.3-2.38,5.45-3.75,8.77-3.75h212.26c5.39,0,8.17,6.47,4.43,10.36h0Z" />
-        
-        {/* Center Slanted Horizontal Bar Track */}
-        <Path fill={resultCoinDetailFill} d="M141.84,291.57l47.93,49.97c2.3,2.38,5.45,3.75,8.77,3.75h212.26c5.39,0,8.17-6.47,4.43-10.36l-47.93-49.97c-2.3-2.38-5.45-3.75-8.77-3.75h-212.26c-5.39,0-8.17,6.47-4.43,10.36Z" />
-        
-        {/* Bottom Slanted Horizontal Bar Track */}
-        <Path fill={resultCoinDetailFill} d="M415.19,385.58l-47.93,49.97c-2.3,2.38-5.45,3.75-8.77,3.75h-212.26c-5.39,0-8.17-6.47-4.43-10.36l47.93-49.97c2.3-2.38,5.45-3.75,8.77-3.75h212.26c5.39,0,8.17,6.47,4.43,10.36Z" />
-      </G>
-    </Svg>
-    </View>
-
-    {/* Bottom Dynamic Action Trigger with Brutalist Hard Shadow */}
-    <View style={s.claimButtonContainer}>
-      {/* Thick white offset block shadow underneath */}
-      <View
-        style={[
-          s.claimButtonShadow,
-          isLoseResult && { backgroundColor: '#8A8D90' },
-        ]}
-      />
-      
-      {/* Core action button changes color dynamically */}
-      <TouchableOpacity
-        activeOpacity={0.9}
-        style={[
-          s.btnClaimMain,
-          isLoseResult && { backgroundColor: '#FFFFFF' }
-        ]}
-        onPress={() => { setResultModal(null); setPhase('idle'); void fetchGames(); }}
-      >
-        <Text style={s.btnClaimText}>
-          {resultModal === 'WON' ? 'claim win' : 'return'}
-        </Text>
-      </TouchableOpacity>
-    </View>
-
-  </View>
-      </SafeAreaView>
-</Modal>
 
       {/* ── HISTORY DETAIL MODAL ─────────────────────────────────────────── */}
       <Modal visible={!!selectedHist} transparent animationType="slide" onRequestClose={() => setSelectedHist(null)}>
@@ -2338,7 +2349,7 @@ wagerLabel: {
   },
   settlingScreen: {
     flex: 1,
-    backgroundColor: '#080b10',
+    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
   },
