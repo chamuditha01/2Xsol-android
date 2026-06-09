@@ -918,14 +918,14 @@ export default function games() {
       
       {/* Fixed create-new button positioned above the bottom */}
       <View style={s.fixedCreateWrapper} pointerEvents="box-none">
-        <View style={s.createNewContainer}>
-          <View style={s.createNewShadow} />
+        <View style={s.buttonContainer}>
+          <View style={s.buttonShadow} />
           <TouchableOpacity
             activeOpacity={0.9}
-            style={s.btnCreateNewMain}
+            style={s.btnCreate}
             onPress={() => router.replace('/')}
           >
-            <Text style={s.btnCreateNewText}>create new</Text>
+            <Text style={s.btnCreateText}>create new</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1352,7 +1352,7 @@ const s = StyleSheet.create({
     textTransform: 'lowercase',
     letterSpacing: 0.5,
   },
-  createNewContainer: {
+  buttonContainer: {
     position: 'relative',
 
     marginTop: 40,
@@ -1361,7 +1361,7 @@ const s = StyleSheet.create({
     alignSelf: 'center',
      // Proportional compressed height matching your custom dashboard button assets
   },
-  createNewShadow: {
+  buttonShadow: {
     position: 'absolute',
     top: 8,            // Shifts shadow downwards
     left: 8,           // Shifts shadow rightwards
@@ -1370,7 +1370,7 @@ const s = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 0,   // Strict flat, sharp brutalist edges
   },
-  btnCreateNewMain: {
+  btnCreate: {
      position: 'absolute',
     top: 0,
     left: 0,
@@ -1382,7 +1382,7 @@ const s = StyleSheet.create({
     borderRadius: 0,            // Erases the old rounded corners
     borderWidth: 0,
   },
-  btnCreateNewText: {
+  btnCreateText: {
     fontFamily: 'Orbitron-SemiBold',
     fontSize: 28, // Large bold low-profile typography sizing metric
     color: '#000000',

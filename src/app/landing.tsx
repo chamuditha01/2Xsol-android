@@ -16,46 +16,46 @@ import 'react-native-get-random-values';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import nacl from 'tweetnacl';
 
-const coinVideo = require('../../assets/videos/coin 2 (1).mp4');
+const coinVideo = require('../../assets/videos/3d coin.mp4');
 
 if (typeof (globalThis as any).Buffer === 'undefined') (globalThis as any).Buffer = Buffer;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const PHANTOM_SESSION_KEY       = 'solflip_phantom_session';
-const MAIN_WALLET_ADDRESS_KEY   = 'solflip_main_wallet_address';
-const PHANTOM_DAPP_KEYPAIR_KEY  = 'solflip_phantom_dapp_keypair';
+const PHANTOM_SESSION_KEY = 'solflip_phantom_session';
+const MAIN_WALLET_ADDRESS_KEY = 'solflip_main_wallet_address';
+const PHANTOM_DAPP_KEYPAIR_KEY = 'solflip_phantom_dapp_keypair';
 const PHANTOM_ENCRYPTION_PUBLIC_KEY_KEY = 'solflip_phantom_encryption_public_key';
 
-const APP_SCHEME                = 'soldoublerandroid';
-const PHANTOM_CONNECT_URL       = 'https://phantom.app/ul/v1/connect';
+const APP_SCHEME = 'soldoublerandroid';
+const PHANTOM_CONNECT_URL = 'https://phantom.app/ul/v1/connect';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
-  bg:      '#000000',
-  accent:  '#c3f306',
-  white:   '#FFFFFF',
-  black:   '#000000',
-  muted:   '#5a6a7a',
+  bg: '#000000',
+  accent: '#c3f306',
+  white: '#FFFFFF',
+  black: '#000000',
+  muted: '#5a6a7a',
 };
 
 // ─── Phantom helpers ──────────────────────────────────────────────────────────
 function buildConnectDeeplink(dappKeyPair: nacl.BoxKeyPair, nonce: Uint8Array): string {
   const params = new URLSearchParams({
     dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
-    nonce:                       bs58.encode(nonce),
-    redirect_link:               `${APP_SCHEME}://onConnect`,
-    cluster:                     'devnet',
-    app_url:                     `${APP_SCHEME}://`,
+    nonce: bs58.encode(nonce),
+    redirect_link: `${APP_SCHEME}://onConnect`,
+    cluster: 'devnet',
+    app_url: `${APP_SCHEME}://`,
   });
   return `${PHANTOM_CONNECT_URL}?${params.toString()}`;
 }
 
 export default function LandingScreen() {
-  const [connecting,  setConnecting]  = useState(false);
-  const [statusMsg,   setStatusMsg]   = useState('');
+  const [connecting, setConnecting] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
 
-  const dappKP    = useRef<nacl.BoxKeyPair>(nacl.box.keyPair());
-  const nonceRef  = useRef<Uint8Array>(nacl.randomBytes(24));
+  const dappKP = useRef<nacl.BoxKeyPair>(nacl.box.keyPair());
+  const nonceRef = useRef<Uint8Array>(nacl.randomBytes(24));
 
   const player = useVideoPlayer(coinVideo, (player) => {
     player.loop = true;
@@ -77,8 +77,8 @@ export default function LandingScreen() {
   const handlePhantomCallback = useCallback(async (url: string) => {
     try {
       setStatusMsg('VERIFYING WALLET...');
-      const parsed    = Linking.parse(url);
-      const params    = parsed.queryParams as Record<string, string> | null;
+      const parsed = Linking.parse(url);
+      const params = parsed.queryParams as Record<string, string> | null;
 
       if (!params) throw new Error('No params in deeplink');
 
@@ -89,11 +89,11 @@ export default function LandingScreen() {
       }
 
       const phantomEncPubKey = bs58.decode(params.phantom_encryption_public_key);
-      const nonce            = bs58.decode(params.nonce);
-      const encData          = bs58.decode(params.data);
+      const nonce = bs58.decode(params.nonce);
+      const encData = bs58.decode(params.data);
 
       const sharedSecret = nacl.box.before(phantomEncPubKey, dappKP.current.secretKey);
-      const decrypted    = nacl.box.open.after(encData, nonce, sharedSecret);
+      const decrypted = nacl.box.open.after(encData, nonce, sharedSecret);
       if (!decrypted) throw new Error('Decryption failed');
 
       const decryptedData = JSON.parse(Buffer.from(decrypted).toString('utf8'));
@@ -207,11 +207,11 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    height: '100%',  
+    height: '100%',
     aspectRatio: 1,
   },
   video: {
-    width: '100%',
+    width: '60%',
     height: '100%',
   },
   statusMsg: {

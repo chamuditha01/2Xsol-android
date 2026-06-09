@@ -458,13 +458,16 @@ export default function WalletTab() {
             autoCorrect={false}
           />
 
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={s.hollowOutlineBtn}
-            onPress={() => { void disconnectPhantom(); }}
-          >
-            <Text style={s.hollowBtnText}>disconnect phantom mobile app</Text>
-          </TouchableOpacity>
+          <View style={s.buttonContainer}>
+            <View style={s.buttonShadow} />
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={s.btnCreate}
+              onPress={() => { void disconnectPhantom(); }}
+            >
+              <Text style={s.btnCreateText}>disconnect phantom mobile app</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* COMPONENT CARD 3: ESCROW TRANSFER AMOUNT ROUTER */}
@@ -482,32 +485,38 @@ export default function WalletTab() {
 
           <View style={s.actionRow}>
             {/* DEPOSIT ACTION BUTTON */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={[s.hollowOutlineBtn, { flex: 1 }, depositing && s.disabledOpacity]}
-              onPress={() => { void depositToAppWallet(); }}
-              disabled={depositing}
-            >
-              {depositing ? (
-                <ActivityIndicator color={C.accent} />
-              ) : (
-                <Text style={s.hollowBtnText}>deposit</Text>
-              )}
-            </TouchableOpacity>
+            <View style={[s.buttonContainer, { flex: 1, marginTop: 10, marginBottom: 0 }]}>
+              <View style={s.buttonShadow} />
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={[s.btnCreate, depositing && s.btnDisabled]}
+                onPress={() => { void depositToAppWallet(); }}
+                disabled={depositing}
+              >
+                {depositing ? (
+                  <ActivityIndicator color="#000" />
+                ) : (
+                  <Text style={s.btnCreateText}>deposit</Text>
+                )}
+              </TouchableOpacity>
+            </View>
 
             {/* WITHDRAW ACTION BUTTON */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={[s.solidAccentBtn, { flex: 1 }, withdrawing && s.disabledOpacity]}
-              onPress={() => { void withdrawToMainWallet(); }}
-              disabled={withdrawing}
-            >
-              {withdrawing ? (
-                <ActivityIndicator color="#080b10" />
-              ) : (
-                <Text style={s.solidBtnText}>withdraw</Text>
-              )}
-            </TouchableOpacity>
+            <View style={[s.buttonContainer, { flex: 1, marginTop: 10, marginBottom: 0 }]}>
+              <View style={s.buttonShadow} />
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={[s.btnCreate, withdrawing && s.btnDisabled]}
+                onPress={() => { void withdrawToMainWallet(); }}
+                disabled={withdrawing}
+              >
+                {withdrawing ? (
+                  <ActivityIndicator color="#000" />
+                ) : (
+                  <Text style={s.btnCreateText}>withdraw</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -632,37 +641,42 @@ const s = StyleSheet.create({
   },
   
   // ─── BRUTALIST INTERACTION ACTUATORS ──────────────────────────────────────
-  solidAccentBtn: {
-    height: 44,
-    backgroundColor: '#C3F306',
+  buttonContainer: {
+    position: 'relative',
+    height: 56,
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  buttonShadow: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    right: -6,
+    bottom: -6,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 0,
+  },
+  btnCreate: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#D1FF00', // Neon lime/yellow color
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 0,
+    borderWidth: 0,
   },
-  solidBtnText: {
-    fontFamily: 'Orbitron',
-    fontSize: 15,
-    color: '#080b10',
-    fontWeight: '900',
+  btnCreateText: {
+    fontFamily: 'Orbitron-SemiBold',
+    fontSize: 16,
+    color: '#000000',
+    letterSpacing: -0.5,
     textTransform: 'lowercase',
   },
-  hollowOutlineBtn: {
-    height: 44,
-    backgroundColor: '#151618',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 0,
-  },
-  hollowBtnText: {
-    fontFamily: 'Orbitron',
-    fontSize: 15,
-    color: '#FFFFFF',
-    textTransform: 'lowercase',
-  },
-  disabledOpacity: {
-    opacity: 0.3,
+  btnDisabled: {
+    opacity: 0.5,
   },
   
   // ─── BOTTOM SYSTEM DIAGNOSTIC COMPONENT ───────────────────────────────────

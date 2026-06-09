@@ -231,9 +231,16 @@ export default function VerifyGameScreen() {
             </View>
           </View>
 
-          <TouchableOpacity style={s.executeBtn} onPress={handleVerify}>
-            <Text style={s.executeBtnText}>EXECUTE_VALIDATION</Text>
-          </TouchableOpacity>
+          <View style={s.buttonContainer}>
+            <View style={s.buttonShadow} />
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={s.btnCreate}
+              onPress={handleVerify}
+            >
+              <Text style={s.btnCreateText}>execute validation</Text>
+            </TouchableOpacity>
+          </View>
 
           {verificationResult && (
             <View
@@ -433,19 +440,40 @@ const s = StyleSheet.create({
     gap: 10,
     marginBottom: 14,
   },
-  executeBtn: {
-    borderRadius: 10,
-    backgroundColor: C.accent,
-    paddingVertical: 14,
+  buttonContainer: {
+    position: 'relative',
+    height: 56,
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  buttonShadow: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    right: -6,
+    bottom: -6,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 0,
+  },
+  btnCreate: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#D1FF00', // Neon lime/yellow color
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 0,
+    borderWidth: 0,
   },
-  executeBtnText: {
-    color: '#06110f',
+  btnCreateText: {
     fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    fontSize: 16,
+    color: '#000000',
     fontWeight: '900',
-    letterSpacing: 1.1,
-    fontSize: 12,
+    letterSpacing: -0.5,
+    textTransform: 'lowercase',
   },
   resultBox: {
     marginTop: 16,
